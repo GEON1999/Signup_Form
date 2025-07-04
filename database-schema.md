@@ -17,6 +17,7 @@ CREATE TABLE users (
   password_hash VARCHAR(255) NOT NULL,
   email_verified BOOLEAN DEFAULT FALSE,
   phone_verified BOOLEAN DEFAULT FALSE,
+  social_id VARCHAR(255), -- GitHub 연동 시 GitHub 이메일 저장, 비연동시 NULL
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -31,6 +32,7 @@ CREATE TABLE users (
 - `password_hash`: 암호화된 비밀번호
 - `email_verified`: 이메일 인증 여부
 - `phone_verified`: 전화번호 인증 여부
+- `social_id`: GitHub 연동 시 GitHub 이메일 저장 (통합 계정 관리용)
 - `created_at`: 생성 시간
 - `updated_at`: 수정 시간
 
@@ -60,38 +62,12 @@ CREATE TABLE profiles (
 - `created_at`: 생성 시간
 - `updated_at`: 수정 시간
 
-### 3. SNS_Accounts 테이블 (SNS 연동 정보)
+### 3. 소셜 계정 연동
 
-```sql
-CREATE TABLE sns_accounts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  provider VARCHAR(50) NOT NULL,
-  provider_id VARCHAR(255) NOT NULL,
-  provider_email VARCHAR(255),
-  provider_name VARCHAR(100),
-  access_token TEXT,
-  refresh_token TEXT,
-  token_expires_at TIMESTAMP WITH TIME ZONE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(provider, provider_id)
-);
-```
-
-**필드 설명:**
-
-- `id`: SNS 계정 고유 식별자
-- `user_id`: Users 테이블 참조 (외래키)
-- `provider`: SNS 제공업체 (google, kakao, naver 등)
-- `provider_id`: SNS 제공업체에서의 사용자 ID
-- `provider_email`: SNS에서 제공하는 이메일
-- `provider_name`: SNS에서 제공하는 이름
-- `access_token`: OAuth 액세스 토큰
-- `refresh_token`: OAuth 리프레시 토큰
-- `token_expires_at`: 토큰 만료 시간
-- `created_at`: 생성 시간
-- `updated_at`: 수정 시간
+Supabase의 내장 인증 시스템과 `linkIdentity` 기능을 사용하여 소셜 계정 연동을 처리합니다.
+- 이메일/비밀번호로 회원가입한 사용자에게 GitHub 등의 소셜 계정을 연결
+- 별도의 sns_accounts 테이블 없이 Supabase Auth에서 통합 관리
+- `auth.identities` 테이블에서 연결된 계정 정보 확인 가능
 
 ## 테이블 관계
 
@@ -100,12 +76,6 @@ CREATE TABLE sns_accounts (
 - 한 사용자는 하나의 프로필을 가짐
 - 프로필은 반드시 사용자에 속함
 - CASCADE DELETE: 사용자 삭제 시 프로필도 삭제
-
-### 2. Users ↔ SNS_Accounts (1:N 관계)
-
-- 한 사용자는 여러 SNS 계정을 연동할 수 있음(확장 가능성)
-- SNS 계정은 반드시 하나의 사용자에 속함
-- CASCADE DELETE: 사용자 삭제 시 연동된 SNS 계정도 삭제
 
 ## 인덱스 설계
 
@@ -123,69 +93,7 @@ CREATE INDEX idx_users_phone ON users(phone);
 CREATE INDEX idx_profiles_user_id ON profiles(user_id);
 ```
 
-### SNS_Accounts 테이블
 
-```sql
-CREATE INDEX idx_sns_accounts_user_id ON sns_accounts(user_id);
-CREATE INDEX idx_sns_accounts_provider ON sns_accounts(provider);
-CREATE INDEX idx_sns_accounts_provider_id ON sns_accounts(provider, provider_id);
-```
-
-## Row Level Security (RLS) 정책
-
-### Users 테이블
-
-```sql
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-
--- 사용자는 자신의 정보만 조회 가능
-CREATE POLICY "Users can view own profile" ON users
-    FOR SELECT USING (auth.uid() = id);
-
--- 사용자는 자신의 정보만 수정 가능
-CREATE POLICY "Users can update own profile" ON users
-    FOR UPDATE USING (auth.uid() = id);
-```
-
-### Profiles 테이블
-
-```sql
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-
--- 사용자는 자신의 프로필만 조회 가능
-CREATE POLICY "Users can view own profile" ON profiles
-    FOR SELECT USING (auth.uid() = user_id);
-
--- 사용자는 자신의 프로필만 수정 가능
-CREATE POLICY "Users can update own profile" ON profiles
-    FOR UPDATE USING (auth.uid() = user_id);
-
--- 사용자는 자신의 프로필만 생성 가능
-CREATE POLICY "Users can create own profile" ON profiles
-    FOR INSERT WITH CHECK (auth.uid() = user_id);
-```
-
-### SNS_Accounts 테이블
-
-```sql
-ALTER TABLE sns_accounts ENABLE ROW LEVEL SECURITY;
-
--- 사용자는 자신의 SNS 계정만 조회 가능
-CREATE POLICY "Users can view own sns accounts" ON sns_accounts
-    FOR SELECT USING (auth.uid() = user_id);
-
--- 사용자는 자신의 SNS 계정만 수정 가능
-CREATE POLICY "Users can update own sns accounts" ON sns_accounts
-    FOR UPDATE USING (auth.uid() = user_id);
-
--- 사용자는 자신의 SNS 계정만 생성 가능
-CREATE POLICY "Users can create own sns accounts" ON sns_accounts
-    FOR INSERT WITH CHECK (auth.uid() = user_id);
-
--- 사용자는 자신의 SNS 계정만 삭제 가능
-CREATE POLICY "Users can delete own sns accounts" ON sns_accounts
-    FOR DELETE USING (auth.uid() = user_id);
-```
 
 ## 회원가입 단계별 데이터 수집
 

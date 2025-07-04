@@ -1,12 +1,30 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Input, Button, FormContainer } from '../components/ui';
 import { loginSchema, type LoginFormData } from '../schemas/signupSchemas';
+import { signIn } from '../api/auth';
+import { supabase } from '../lib/supabase';
+import type { Provider } from '@supabase/supabase-js';
 
 const Home: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [isLoading, setIsLoading] = useState(false);
+  const [isGitHubLoading, setIsGitHubLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginSuccess, setLoginSuccess] = useState(false);
+
+  // GitHub 콜백에서 전달된 에러 메시지 처리
+  useEffect(() => {
+    const state = location.state as { error?: string } | null;
+    if (state?.error) {
+      setLoginError(state.error);
+      // location state 정리
+      navigate('/', { replace: true, state: {} });
+    }
+  }, [location.state, navigate]);
 
   const {
     register,
@@ -23,30 +41,65 @@ const Home: React.FC = () => {
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
+    setLoginError(null);
     try {
-      // 실제 로그인 API 호출 대신 시뮬레이션
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      console.log('로그인 데이터:', data);
-      alert('로그인 기능은 데모용입니다.');
-    } catch (error) {
+      // Supabase signIn API 호출
+      const result = await signIn(data.email, data.password);
+
+      console.log('로그인 성공:', result);
+      setLoginSuccess(true);
+
+      // 로그인 성공 시 /home으로 리디렉션
+      setTimeout(() => {
+        navigate('/home', { replace: true });
+      }, 1500);
+    } catch (error: any) {
       console.error('로그인 오류:', error);
-      alert('로그인 중 오류가 발생했습니다.');
+      setLoginError(error.message || '로그인 중 오류가 발생했습니다.');
+      setLoginSuccess(false);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleKakaoLogin = () => {
-    // 카카오 로그인 시뮬레이션
-    console.log('카카오 로그인 요청');
-    alert('카카오 로그인은 데모용입니다.');
+  const handleGitHubLogin = async () => {
+    setIsGitHubLoading(true);
+    setLoginError(null);
+
+    try {
+      // 1. 먼저 임시 GitHub 인증으로 사용자 정보 가져오기
+      const { data: authData, error: authError } =
+        await supabase.auth.signInWithOAuth({
+          provider: 'github' as Provider,
+          options: {
+            redirectTo: `${window.location.origin}/auth/github-callback`,
+            scopes: 'user:email',
+            skipBrowserRedirect: true, // 리디렉션 방지
+          },
+        });
+
+      if (authError) {
+        throw authError;
+      }
+
+      // GitHub OAuth URL로 리디렉션 (계정 확인은 콜백에서 처리)
+      if (authData?.url) {
+        window.location.href = authData.url;
+      }
+    } catch (error: any) {
+      console.error('GitHub 로그인 오류:', error);
+      setLoginError(
+        `GitHub 로그인 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`
+      );
+      setIsGitHubLoading(false);
+    }
   };
 
-  const handleFindAccount = (type: 'id' | 'password') => {
-    // 계정 찾기 시뮬레이션
-    console.log(`${type === 'id' ? '아이디' : '비밀번호'} 찾기 요청`);
-    alert(`${type === 'id' ? '아이디' : '비밀번호'} 찾기는 데모용입니다.`);
-  };
+  // const handleFindAccount = (type: 'id' | 'password') => {
+  //   // 계정 찾기 시뮬레이션
+  //   console.log(`${type === 'id' ? '아이디' : '비밀번호'} 찾기 요청`);
+  //   alert(`${type === 'id' ? '아이디' : '비밀번호'} 찾기는 데모용입니다.`);
+  // };
 
   return (
     <div className="min-h-screen bg-gray-100 py-8">
@@ -92,7 +145,7 @@ const Home: React.FC = () => {
               </div>
             </div>
 
-            {/* 계정 찾기 링크 */}
+            {/* 계정 찾기 링크
             <div className="flex justify-center space-x-4 text-sm text-gray-600">
               <button
                 type="button"
@@ -109,7 +162,23 @@ const Home: React.FC = () => {
               >
                 비밀번호 찾기
               </button>
-            </div>
+            </div> */}
+
+            {/* 에러 메시지 */}
+            {loginError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-600">{loginError}</p>
+              </div>
+            )}
+
+            {/* 성공 메시지 */}
+            {loginSuccess && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-600">
+                  로그인 성공! 이동 중...
+                </p>
+              </div>
+            )}
 
             {/* 로그인 버튼 */}
             <Button
@@ -119,6 +188,7 @@ const Home: React.FC = () => {
               loading={isLoading}
               loadingText="로그인 중..."
               className="w-full"
+              disabled={loginSuccess}
             >
               로그인
             </Button>
@@ -134,13 +204,18 @@ const Home: React.FC = () => {
             </div>
           </div>
 
-          {/* 카카오 로그인 */}
+          {/* GitHub 로그인 */}
           <button
-            onClick={handleKakaoLogin}
-            className="w-full flex items-center justify-center px-4 py-3 border border-transparent rounded-lg text-sm font-medium text-gray-900 bg-yellow-400 hover:bg-yellow-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 transition-colors duration-200"
+            onClick={handleGitHubLogin}
+            disabled={isGitHubLoading || loginSuccess}
+            className="w-full flex items-center justify-center px-4 py-3 border border-transparent rounded-lg text-sm font-medium text-white bg-gray-800 hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span className="mr-2"></span>
-            카카오톡으로 로그인
+            <img
+              src="/github-mark-white.png"
+              alt="GitHub 로고"
+              className="w-5 h-5 mr-2"
+            />
+            {isGitHubLoading ? 'GitHub 로그인 중...' : 'GitHub 계정으로 로그인'}
           </button>
 
           {/* 회원가입 링크 */}
