@@ -1,77 +1,139 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import AuthTest from '../components/AuthTest';
+import { Input, Button, FormContainer } from '../components/ui';
+
+interface LoginData {
+  email: string;
+  password: string;
+}
 
 const Home: React.FC = () => {
-  const [showAuthTest, setShowAuthTest] = useState(false);
+  const [loginData, setLoginData] = useState<LoginData>({
+    email: '',
+    password: '',
+  });
+  const [isLoading, setIsLoading] = useState(false);
 
-  const testSupabaseConnection = async () => {
-    try {
-      const { error } = await supabase.from('test').select('*').limit(1);
-      if (error) {
-        if (
-          error.message.includes('does not exist') &&
-          (error.message.includes('test') ||
-            error.message.includes('public.test'))
-        ) {
-          console.log('Supabase 연결 성공');
-        } else {
-          console.log(`Supabase 연결 실패: ${error.message}`);
-        }
-      } else {
-        console.log('Supabase 연결 및 테이블 접근 성공');
-      }
-    } catch (err) {
-      console.log(`Supabase 연결 오류: ${err}`);
-    }
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setLoginData((prev) => ({ ...prev, [name]: value }));
   };
 
-  if (showAuthTest) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto py-8">
-          <button
-            onClick={() => setShowAuthTest(false)}
-            className="mb-4 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition duration-200"
-          >
-            ← 홈으로 돌아가기
-          </button>
-          <AuthTest />
-        </div>
-      </div>
-    );
-  }
+  const handleLogin = async () => {
+    setIsLoading(true);
+    // 실제 로그인 API 호출 대신 시뮬레이션
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    console.log('로그인 데이터:', loginData);
+    alert('로그인 기능은 데모용입니다.');
+    setIsLoading(false);
+  };
+
+  const handleKakaoLogin = () => {
+    // 카카오 로그인 시뮬레이션
+    console.log('카카오 로그인 요청');
+    alert('카카오 로그인은 데모용입니다.');
+  };
+
+  const handleFindAccount = (type: 'id' | 'password') => {
+    // 계정 찾기 시뮬레이션
+    console.log(`${type === 'id' ? '아이디' : '비밀번호'} 찾기 요청`);
+    alert(`${type === 'id' ? '아이디' : '비밀번호'} 찾기는 데모용입니다.`);
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-        <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">
-          회원가입 시스템
-        </h1>
-        
-        <div className="space-y-4">
-          <Link
-            to="/signup/step1"
-            className="w-full bg-blue-500 text-white py-3 px-4 rounded-lg hover:bg-blue-600 transition duration-200 text-center block"
+    <div className="min-h-screen bg-gray-100 py-8">
+      <div className="max-w-4xl mx-auto px-4">
+        <FormContainer
+          title="로그인"
+          subtitle="우리의 이야기 시작하기"
+          maxWidth="sm"
+        >
+          {/* 로그인 폼 */}
+          <div className="space-y-6">
+            {/* 이메일/아이디 */}
+            <Input
+              label="이메일"
+              name="email"
+              type="email"
+              placeholder="이메일을 입력해주세요"
+              value={loginData.email}
+              onChange={handleInputChange}
+              autoComplete="username"
+            />
+
+            {/* 비밀번호 */}
+            <Input
+              label="비밀번호"
+              name="password"
+              type="password"
+              placeholder="비밀번호를 입력해주세요"
+              value={loginData.password}
+              onChange={handleInputChange}
+              autoComplete="current-password"
+            />
+          </div>
+
+          {/* 계정 찾기 링크 */}
+          <div className="flex justify-center space-x-4 text-sm text-gray-600">
+            <button
+              onClick={() => handleFindAccount('id')}
+              className="hover:text-gray-900 transition-colors duration-200"
+            >
+              아이디 찾기
+            </button>
+            <span className="text-gray-400">|</span>
+            <button
+              onClick={() => handleFindAccount('password')}
+              className="hover:text-gray-900 transition-colors duration-200"
+            >
+              비밀번호 찾기
+            </button>
+          </div>
+
+          {/* 로그인 버튼 */}
+          <Button
+            variant="primary"
+            size="md"
+            onClick={handleLogin}
+            loading={isLoading}
+            loadingText="로그인 중..."
+            className="w-full"
           >
-            회원가입 시작하기
-          </Link>
-          
+            로그인
+          </Button>
+
+          {/* 구분선 */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="bg-white px-2 text-gray-500">또는</span>
+            </div>
+          </div>
+
+          {/* 카카오 로그인 */}
           <button
-            onClick={testSupabaseConnection}
-            className="w-full bg-green-500 text-white py-3 px-4 rounded-lg hover:bg-green-600 transition duration-200"
+            onClick={handleKakaoLogin}
+            className="w-full flex items-center justify-center px-4 py-3 border border-transparent rounded-lg text-sm font-medium text-gray-900 bg-yellow-400 hover:bg-yellow-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 transition-colors duration-200"
           >
-            Supabase 연결 테스트
+            <span className="mr-2"></span>
+            카카오톡으로 로그인
           </button>
-          
-          <button
-            onClick={() => setShowAuthTest(true)}
-            className="w-full bg-purple-500 text-white py-3 px-4 rounded-lg hover:bg-purple-600 transition duration-200"
-          >
-            인증 스토어 테스트
-          </button>
-        </div>
+
+          {/* 회원가입 링크 */}
+          <div className="text-center">
+            <p className="text-sm text-gray-600">
+              아직 계정이 없으신가요?{' '}
+              <Link
+                to="/signup/step1"
+                className="font-medium text-gray-900 hover:text-gray-700 transition-colors duration-200"
+              >
+                회원가입
+              </Link>
+            </p>
+          </div>
+        </FormContainer>
       </div>
     </div>
   );
