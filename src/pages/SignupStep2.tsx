@@ -1,24 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Input, Button, FormContainer } from '../components/ui';
 import ProgressIndicator from '../components/ProgressIndicator';
 import { step2Schema, type Step2FormData } from '../schemas/signupSchemas';
+import { useSignupStore } from '../stores/signupStore';
 
 const SignupStep2: React.FC = () => {
   const navigate = useNavigate();
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   
+  // Zustand 스토어에서 데이터 가져오기
+  const { 
+    step2Data, 
+    setStep2Data, 
+    setCurrentStep 
+  } = useSignupStore();
+  
   const {
     register,
     handleSubmit,
     setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<Step2FormData>({
     resolver: zodResolver(step2Schema),
     mode: 'onChange',
-    defaultValues: {
+    // 스토어에 저장된 데이터가 있으면 사용, 없으면 빈 값으로 초기화
+    defaultValues: step2Data || {
       birthDate: '',
       gender: undefined,
       profileImage: undefined,
@@ -43,13 +53,29 @@ const SignupStep2: React.FC = () => {
     },
   ];
 
+  // 스토어에 저장된 이미지 미리보기 복원
+  useEffect(() => {
+    if (step2Data?.profileImagePreview) {
+      setImagePreview(step2Data.profileImagePreview);
+    }
+  }, [step2Data]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       // 미리보기 생성
       const reader = new FileReader();
       reader.onload = (event) => {
-        setImagePreview(event.target?.result as string);
+        const imagePreview = event.target?.result as string;
+        setImagePreview(imagePreview);
+        
+        // 미리보기 URL도 스토어에 저장
+        if (step2Data) {
+          setStep2Data({
+            ...step2Data,
+            profileImagePreview: imagePreview
+          });
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -57,7 +83,14 @@ const SignupStep2: React.FC = () => {
 
   const onSubmit = async (data: Step2FormData) => {
     try {
-      // TODO: 데이터 보존 로직 추가 예정
+      // 입력 데이터를 스토어에 저장
+      setStep2Data({
+        ...data,
+        profileImagePreview: imagePreview
+      });
+      
+      // 현재 단계 업데이트
+      setCurrentStep(2);
       console.log('2단계 데이터:', data);
       
       // 다음 단계로 이동
@@ -153,6 +186,16 @@ const SignupStep2: React.FC = () => {
               <Link
                 to="/signup/step1"
                 className="inline-flex items-center justify-center px-4 py-2 text-base font-medium rounded-lg transition-colors duration-200 bg-transparent hover:bg-gray-100 focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 text-gray-600 border-transparent"
+                onClick={() => {
+                  // 현재 입력된 데이터 저장
+                  const currentData = {
+                    birthDate: String(getValues('birthDate') || ''),
+                    gender: getValues('gender'),
+                    profileImage: getValues('profileImage'),
+                    profileImagePreview: imagePreview
+                  };
+                  setStep2Data(currentData);
+                }}
               >
                 이전 단계
               </Link>
