@@ -1,27 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, FormContainer, ErrorMessage } from '../components/ui';
 import ProgressIndicator from '../components/ProgressIndicator';
 import { useSignupStore } from '../stores/signupStore';
 import { signUp } from '../api/auth';
+import { supabase } from '../lib/supabase';
 import type { SignupData } from '../types/auth';
+import type { Provider } from '@supabase/supabase-js';
 
 interface SnsAccount {
-  provider: 'kakao';
+  provider: 'github';
   connected: boolean;
   email?: string;
   name?: string;
+  provider_id?: string;
 }
 
 interface FormErrors {
   general?: string;
+  github?: string;
 }
 
 const SignupStep3: React.FC = () => {
   const navigate = useNavigate();
   const [snsAccounts, setSnsAccounts] = useState<SnsAccount[]>([
-    { provider: 'kakao', connected: false },
+    { provider: 'github', connected: false },
   ]);
+  const [connectingGithub, setConnectingGithub] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
 
@@ -43,54 +48,161 @@ const SignupStep3: React.FC = () => {
     },
   ];
 
-  const snsProviderInfo = {
-    kakao: {
-      name: 'Kakao',
-      icon: '🔴',
-      color: 'bg-red-50 hover:bg-red-100 border-red-200',
-      buttonColor: 'bg-red-500 hover:bg-red-600',
+  const snsProviderInfo: Record<
+    SnsAccount['provider'],
+    { name: string; buttonColor: string; icon: React.ReactNode; color: string }
+  > = {
+    github: {
+      name: 'GitHub',
+      buttonColor: 'bg-gray-800 hover:bg-gray-900',
+      icon: (
+        <img className="w-8 h-8" src="/github-mark.png" alt="GitHub 로고" />
+      ),
+      color: 'bg-gray-100 hover:bg-gray-200 border-gray-300',
     },
   };
 
   const handleSnsConnect = async (provider: SnsAccount['provider']) => {
-    setIsLoading(true);
-    setErrors({});
+    if (provider === 'github') {
+      setConnectingGithub(true);
+      setErrors({});
 
+      try {
+        // Supabase GitHub OAuth 로그인
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'github' as Provider,
+          options: {
+            redirectTo: `${window.location.origin}/signup/step3`,
+            scopes: 'user:email',
+          },
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        // 로그인 성공 시 팝업이 열리므로 여기서는 상태를 변경하지 않음
+        // GitHub 인증은 리디렉션으로 처리되며, 복귀 시 useEffect에서 처리함
+      } catch (error: any) {
+        console.error('GitHub 연동 오류:', error);
+        setErrors({
+          github: `GitHub 연동 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`,
+        });
+      } finally {
+        setConnectingGithub(false);
+      }
+    }
+  };
+
+  const handleSnsDisconnect = async (provider: SnsAccount['provider']) => {
     try {
-      // 연동된 것으로 가정
+      // Supabase 세션 종료
+      await supabase.auth.signOut();
+
+      // 연동 상태 해제
       setSnsAccounts((prev) =>
         prev.map((account) =>
           account.provider === provider
             ? {
                 ...account,
-                connected: true,
-                email: `user@${provider}.com`,
-                name: `${snsProviderInfo[provider].name} User`,
+                connected: false,
+                email: undefined,
+                name: undefined,
+                provider_id: undefined,
               }
             : account
         )
       );
     } catch (error) {
-      setErrors({
-        general: `${snsProviderInfo[provider].name} 연동에 실패했습니다. 다시 시도해주세요.`,
-      });
-    } finally {
-      setIsLoading(false);
+      console.error('GitHub 연동 해제 오류:', error);
     }
   };
 
-  const handleSnsDisconnect = (provider: SnsAccount['provider']) => {
-    setSnsAccounts((prev) =>
-      prev.map((account) =>
-        account.provider === provider
-          ? { ...account, connected: false, email: undefined, name: undefined }
-          : account
-      )
-    );
-  };
+  // Zustand 스토어에서 데이터 가져오기 - 개별 선택자로 분리하여 무한 루프 방지
+  const step1Data = useSignupStore((state) => state.step1Data);
+  const step2Data = useSignupStore((state) => state.step2Data);
+  const resetAllData = useSignupStore((state) => state.resetAllData);
 
-  // Zustand 스토어에서 데이터 가져오기
-  const { step1Data, step2Data, resetAllData } = useSignupStore();
+  // GitHub OAuth 콜백 처리
+  useEffect(() => {
+    const checkAuthState = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        // 세션이 있고 GitHub로 로그인한 경우
+        if (session?.user && session.user.app_metadata?.provider === 'github') {
+          console.log('GitHub 사용자 세션 감지:', session.user);
+
+          // 연동 상태 업데이트
+          setSnsAccounts((prev) =>
+            prev.map((account) =>
+              account.provider === 'github'
+                ? {
+                    ...account,
+                    connected: true,
+                    email: session.user.email || undefined,
+                    name:
+                      session.user.user_metadata?.name ||
+                      session.user.user_metadata?.user_name ||
+                      'GitHub 사용자',
+                    provider_id: session.user.id,
+                  }
+                : account
+            )
+          );
+        }
+      } catch (error) {
+        console.error('GitHub 세션 확인 오류:', error);
+      }
+    };
+
+    checkAuthState();
+
+    // Auth 상태 변경 감지
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (
+        event === 'SIGNED_IN' &&
+        session?.user?.app_metadata?.provider === 'github'
+      ) {
+        setSnsAccounts((prev) =>
+          prev.map((account) =>
+            account.provider === 'github'
+              ? {
+                  ...account,
+                  connected: true,
+                  email: session.user.email || undefined,
+                  name:
+                    session.user.user_metadata?.name ||
+                    session.user.user_metadata?.user_name ||
+                    'GitHub 사용자',
+                  provider_id: session.user.id,
+                }
+              : account
+          )
+        );
+      } else if (event === 'SIGNED_OUT') {
+        setSnsAccounts((prev) =>
+          prev.map((account) =>
+            account.provider === 'github'
+              ? {
+                  ...account,
+                  connected: false,
+                  email: undefined,
+                  name: undefined,
+                  provider_id: undefined,
+                }
+              : account
+          )
+        );
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const handleComplete = async () => {
     setIsLoading(true);
@@ -105,26 +217,50 @@ const SignupStep3: React.FC = () => {
     }
 
     try {
-      // SNS 연동 정보 (추후 구현 예정)
-      // const connectedSns = snsAccounts.filter((account) => account.connected);
+      // GitHub 연동 정보 확인
+      const connectedGithub = snsAccounts.find(
+        (account) => account.provider === 'github' && account.connected
+      );
+
+      // 디버깅용 GitHub 연동 정보 출력
+      if (connectedGithub) {
+        console.log('GitHub 연동 정보:', {
+          provider: connectedGithub.provider,
+          name: connectedGithub.name,
+          email: connectedGithub.email,
+          provider_id: connectedGithub.provider_id,
+        });
+      }
 
       // SignupData 인터페이스에 맞게 데이터 구성
       const signupData: SignupData = {
         username: step1Data.username,
         email: step1Data.email,
         password: step1Data.password,
-        phone: step1Data.phone || '',
         birth_date: step2Data.birthDate,
         gender: step2Data.gender,
         profile_image_url: step2Data.profileImageUrl || '',
+        // GitHub 연동 정보가 있는 경우 추가
+        github_account: connectedGithub
+          ? {
+              provider_id: connectedGithub.provider_id || '',
+              provider_email: connectedGithub.email,
+              provider_name: connectedGithub.name,
+            }
+          : undefined,
       };
 
       console.log('회원가입 요청 데이터:', signupData);
 
       // Supabase API를 통한 실제 회원가입 요청
       const result = await signUp(signupData);
-      
+
       console.log('회원가입 결과:', result);
+
+      // GitHub 연동 상태가 있었다면 로그아웃 처리
+      if (snsAccounts.some((acc) => acc.connected)) {
+        await supabase.auth.signOut();
+      }
 
       // 회원가입 데이터 초기화
       resetAllData();
@@ -210,10 +346,10 @@ const SignupStep3: React.FC = () => {
                       ) : (
                         <button
                           onClick={() => handleSnsConnect(account.provider)}
-                          disabled={isLoading}
+                          disabled={connectingGithub || isLoading}
                           className={`w-full sm:w-auto px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${providerInfo.buttonColor}`}
                         >
-                          {isLoading ? '연동 중...' : '연동'}
+                          {connectingGithub ? '연동 중...' : '연동'}
                         </button>
                       )}
                     </div>

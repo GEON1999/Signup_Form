@@ -32,7 +32,7 @@ export const signUp = async (
           id: authData.user.id,
           username: userData.username,
           email: userData.email,
-          phone: userData.phone || '',
+          phone: '', // 빈 문자열로 기본값 설정
           email_verified: false,
           phone_verified: false,
         },
@@ -47,7 +47,7 @@ export const signUp = async (
         id: authData.user.id,
         username: userData.username,
         email: userData.email,
-        phone: userData.phone || '',
+        phone: '', // 빈 문자열로 기본값 설정
         email_verified: false,
         phone_verified: false,
         created_at: authData.user.created_at || new Date().toISOString(),
