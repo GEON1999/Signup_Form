@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, FormContainer, ErrorMessage } from '../components/ui';
 import ProgressIndicator from '../components/ProgressIndicator';
+import { useSignupStore } from '../stores/signupStore';
+import { signUp } from '../api/auth';
+import type { SignupData } from '../types/auth';
 
 interface SnsAccount {
   provider: 'kakao';
@@ -86,41 +89,55 @@ const SignupStep3: React.FC = () => {
     );
   };
 
+  // Zustand 스토어에서 데이터 가져오기
+  const { step1Data, step2Data, resetAllData } = useSignupStore();
+
   const handleComplete = async () => {
     setIsLoading(true);
     setErrors({});
 
-    try {
-      // 전체 회원가입 데이터 취합
-      const step1Data = JSON.parse(
-        localStorage.getItem('signupStep1Data') || '{}'
-      );
-      const step2Data = JSON.parse(
-        localStorage.getItem('signupStep2Data') || '{}'
-      );
-      const connectedSns = snsAccounts.filter((account) => account.connected);
+    if (!step1Data || !step2Data) {
+      setErrors({
+        general: '회원가입 정보가 누락되었습니다. 처음부터 다시 시도해주세요.',
+      });
+      setIsLoading(false);
+      return;
+    }
 
-      const completeSignupData = {
-        ...step1Data,
-        ...step2Data,
-        snsAccounts: connectedSns,
-        completedAt: new Date().toISOString(),
+    try {
+      // SNS 연동 정보 (추후 구현 예정)
+      // const connectedSns = snsAccounts.filter((account) => account.connected);
+
+      // SignupData 인터페이스에 맞게 데이터 구성
+      const signupData: SignupData = {
+        username: step1Data.username,
+        email: step1Data.email,
+        password: step1Data.password,
+        phone: step1Data.phone || '',
+        birth_date: step2Data.birthDate,
+        gender: step2Data.gender,
+        profile_image_url: step2Data.profileImageUrl || '',
       };
 
-      console.log('회원가입 완료 데이터:', completeSignupData);
+      console.log('회원가입 요청 데이터:', signupData);
 
-      localStorage.removeItem('signupStep1Data');
-      localStorage.removeItem('signupStep2Data');
-      localStorage.setItem('signupCompleted', 'true');
+      // Supabase API를 통한 실제 회원가입 요청
+      const result = await signUp(signupData);
+      
+      console.log('회원가입 결과:', result);
+
+      // 회원가입 데이터 초기화
+      resetAllData();
 
       // 회원가입 완료 후 홈으로 이동
       navigate('/', { replace: true });
 
       // 성공 메시지
       alert('회원가입이 성공적으로 완료되었습니다! 환영합니다.');
-    } catch (error) {
+    } catch (error: any) {
+      console.error('회원가입 오류:', error);
       setErrors({
-        general: '함원가입 완료 중 오류가 발생했습니다. 다시 시도해주세요.',
+        general: `회원가입 완료 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`,
       });
     } finally {
       setIsLoading(false);

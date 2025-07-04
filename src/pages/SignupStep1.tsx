@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -6,9 +6,23 @@ import { Input, Button, FormContainer } from '../components/ui';
 import ProgressIndicator from '../components/ProgressIndicator';
 import { step1Schema, type Step1FormData } from '../schemas/signupSchemas';
 import { checkUsernameAvailability, checkEmailAvailability } from '../api/auth';
+import { useSignupStore } from '../stores/signupStore';
 
 const SignupStep1: React.FC = () => {
   const navigate = useNavigate();
+
+  // Zustand 스토어에서 데이터 가져오기
+  const {
+    step1Data,
+    setStep1Data,
+    setCurrentStep,
+    usernameChecked,
+    usernameValid,
+    emailChecked,
+    emailValid,
+    setUsernameCheckStatus,
+    setEmailCheckStatus,
+  } = useSignupStore();
 
   const {
     register,
@@ -18,7 +32,8 @@ const SignupStep1: React.FC = () => {
   } = useForm<Step1FormData>({
     resolver: zodResolver(step1Schema),
     mode: 'onChange',
-    defaultValues: {
+    // 스토어에 저장된 데이터가 있으면 사용, 없으면 빈 값으로 초기화
+    defaultValues: step1Data || {
       username: '',
       email: '',
       password: '',
@@ -26,6 +41,41 @@ const SignupStep1: React.FC = () => {
       phone: '',
     },
   });
+
+  // 스토어에 저장된 중복 확인 상태 복원
+  useEffect(() => {
+    const checkSavedData = async () => {
+      if (step1Data?.username && !usernameChecked) {
+        await handleUsernameCheck();
+      }
+      if (step1Data?.email && !emailChecked) {
+        await handleEmailCheck();
+      }
+    };
+
+    checkSavedData();
+    if (usernameChecked) {
+      setUsernameCheck({
+        isChecking: false,
+        isChecked: usernameChecked,
+        isValid: usernameValid,
+        message: usernameValid
+          ? '중복되지 않은 사용자명입니다'
+          : '이미 사용중인 사용자명입니다',
+      });
+    }
+
+    if (emailChecked) {
+      setEmailCheck({
+        isChecking: false,
+        isChecked: emailChecked,
+        isValid: emailValid,
+        message: emailValid
+          ? '중복되지 않은 이메일입니다'
+          : '이미 가입된 이메일입니다',
+      });
+    }
+  }, []);
 
   // 중복 확인 상태
   const [usernameCheck, setUsernameCheck] = useState<{
@@ -52,6 +102,8 @@ const SignupStep1: React.FC = () => {
         isValid: false,
         message: '사용자명을 입력해주세요',
       });
+      // 스토어 상태 업데이트
+      setUsernameCheckStatus(true, false);
       return;
     }
 
@@ -70,6 +122,8 @@ const SignupStep1: React.FC = () => {
         isValid: result.isAvailable,
         message: result.message,
       });
+      // 스토어 상태 업데이트
+      setUsernameCheckStatus(true, result.isAvailable);
     } catch (error) {
       setUsernameCheck({
         isChecking: false,
@@ -77,6 +131,8 @@ const SignupStep1: React.FC = () => {
         isValid: false,
         message: '중복 확인 중 오류가 발생했습니다',
       });
+      // 스토어 상태 업데이트
+      setUsernameCheckStatus(true, false);
     }
   };
 
@@ -90,6 +146,8 @@ const SignupStep1: React.FC = () => {
         isValid: false,
         message: '이메일을 입력해주세요',
       });
+      // 스토어 상태 업데이트
+      setEmailCheckStatus(true, false);
       return;
     }
 
@@ -108,6 +166,8 @@ const SignupStep1: React.FC = () => {
         isValid: result.isAvailable,
         message: result.message,
       });
+      // 스토어 상태 업데이트
+      setEmailCheckStatus(true, result.isAvailable);
     } catch (error) {
       setEmailCheck({
         isChecking: false,
@@ -115,6 +175,8 @@ const SignupStep1: React.FC = () => {
         isValid: false,
         message: '중복 확인 중 오류가 발생했습니다',
       });
+      // 스토어 상태 업데이트
+      setEmailCheckStatus(true, false);
     }
   };
 
@@ -138,9 +200,22 @@ const SignupStep1: React.FC = () => {
 
   const onSubmit = async (data: Step1FormData) => {
     try {
-      // TODO: 실시간 중복 확인 로직 추가 예정
-      // TODO: 데이터 보존 로직 추가 예정
-      console.log('1단계 데이터:', data);
+      // 아이디와 이메일 중복확인이 완료되었는지 확인
+      if (!usernameCheck.isChecked || !usernameCheck.isValid) {
+        alert('아이디 중복 확인을 완료해주세요.');
+        return;
+      }
+
+      if (!emailCheck.isChecked || !emailCheck.isValid) {
+        alert('이메일 중복 확인을 완료해주세요.');
+        return;
+      }
+
+      // 데이터 보존 - Zustand 스토어에 저장
+      setStep1Data(data);
+      setCurrentStep(2);
+
+      console.log('1단계 데이터가 저장되었습니다:', data);
 
       // 다음 단계로 이동
       navigate('/signup/step2');
@@ -164,7 +239,10 @@ const SignupStep1: React.FC = () => {
             <div className="space-y-6">
               {/* 아이디 */}
               <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="username"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   아이디
                 </label>
                 <div className="flex gap-2 items-start">
@@ -177,11 +255,17 @@ const SignupStep1: React.FC = () => {
                       autoComplete="username"
                       error={errors.username?.message}
                       helperText={
-                        usernameCheck.isChecked 
-                          ? <span className={usernameCheck.isValid ? 'text-green-600' : 'text-red-500'}>
-                              {usernameCheck.message}
-                            </span>
-                          : undefined
+                        usernameCheck.isChecked ? (
+                          <span
+                            className={
+                              usernameCheck.isValid
+                                ? 'text-green-600'
+                                : 'text-red-500'
+                            }
+                          >
+                            {usernameCheck.message}
+                          </span>
+                        ) : undefined
                       }
                     />
                   </div>
@@ -208,7 +292,10 @@ const SignupStep1: React.FC = () => {
 
               {/* 이메일 */}
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="email"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   이메일
                 </label>
                 <div className="flex gap-2 items-start">
@@ -221,11 +308,17 @@ const SignupStep1: React.FC = () => {
                       autoComplete="email"
                       error={errors.email?.message}
                       helperText={
-                        emailCheck.isChecked 
-                          ? <span className={emailCheck.isValid ? 'text-green-600' : 'text-red-500'}>
-                              {emailCheck.message}
-                            </span>
-                          : undefined
+                        emailCheck.isChecked ? (
+                          <span
+                            className={
+                              emailCheck.isValid
+                                ? 'text-green-600'
+                                : 'text-red-500'
+                            }
+                          >
+                            {emailCheck.message}
+                          </span>
+                        ) : undefined
                       }
                     />
                   </div>

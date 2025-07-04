@@ -1,26 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Input, Button, FormContainer } from '../components/ui';
 import ProgressIndicator from '../components/ProgressIndicator';
 import { step2Schema, type Step2FormData } from '../schemas/signupSchemas';
+import { useSignupStore } from '../stores/signupStore';
+import { uploadProfileImage, dataUrlToFile } from '../api/storage';
 
 const SignupStep2: React.FC = () => {
   const navigate = useNavigate();
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | undefined>(undefined);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  
+  // Zustand 스토어에서 데이터 가져오기
+  const { 
+    step2Data, 
+    setStep2Data, 
+    setCurrentStep 
+  } = useSignupStore();
   
   const {
     register,
     handleSubmit,
     setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<Step2FormData>({
     resolver: zodResolver(step2Schema),
     mode: 'onChange',
+    // 스토어에 저장된 데이터가 있으면 사용, 없으면 빈 값으로 초기화
     defaultValues: {
-      birthDate: '',
-      gender: undefined,
+      birthDate: step2Data?.birthDate || '',
+      gender: step2Data?.gender,
+      // File 객체는 저장되지 않으므로 항상 undefined로 초기화
       profileImage: undefined,
     },
   });
@@ -43,13 +57,34 @@ const SignupStep2: React.FC = () => {
     },
   ];
 
+  // 스토어에 저장된 이미지 미리보기 또는 URL 복원
+  useEffect(() => {
+    // 이미지 미리보기가 있으면 복원
+    if (step2Data?.profileImagePreview) {
+      setImagePreview(step2Data.profileImagePreview);
+    }
+    // 업로드된 이미지 URL이 있고 미리보기가 없으면 URL을 미리보기로 사용
+    else if (step2Data?.profileImageUrl && !step2Data?.profileImagePreview) {
+      setImagePreview(step2Data.profileImageUrl);
+    }
+  }, [step2Data]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       // 미리보기 생성
       const reader = new FileReader();
       reader.onload = (event) => {
-        setImagePreview(event.target?.result as string);
+        const imagePreview = event.target?.result as string;
+        setImagePreview(imagePreview);
+        
+        // 미리보기 URL도 스토어에 저장
+        if (step2Data) {
+          setStep2Data({
+            ...step2Data,
+            profileImagePreview: imagePreview
+          });
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -57,8 +92,43 @@ const SignupStep2: React.FC = () => {
 
   const onSubmit = async (data: Step2FormData) => {
     try {
-      // TODO: 데이터 보존 로직 추가 예정
-      console.log('2단계 데이터:', data);
+      let profileImageUrl = '';
+      
+      // 프로필 이미지 업로드 (있는 경우)
+      if (imagePreview) {
+        try {
+          setIsUploading(true);
+          setUploadError(null);
+          
+          // 이미지가 File 객체인 경우 직접 업로드, base64 URL인 경우 File로 변환 후 업로드
+          if (data.profileImage instanceof File) {
+            profileImageUrl = await uploadProfileImage(data.profileImage);
+          } else if (imagePreview) {
+            // base64 이미지 URL을 File 객체로 변환
+            const file = await dataUrlToFile(imagePreview, 'profile.jpg');
+            profileImageUrl = await uploadProfileImage(file);
+          }
+          
+          console.log('이미지 업로드 완료:', profileImageUrl);
+        } catch (error: any) {
+          console.error('이미지 업로드 오류:', error);
+          setUploadError(error.message || '이미지 업로드 중 오류가 발생했습니다.');
+          return; // 업로드 실패 시 제출 중단
+        } finally {
+          setIsUploading(false);
+        }
+      }
+      
+      // 입력 데이터를 스토어에 저장
+      setStep2Data({
+        ...data,
+        profileImagePreview: imagePreview,
+        profileImageUrl: profileImageUrl // Supabase에 업로드된 이미지 URL 저장
+      });
+      
+      // 현재 단계 업데이트
+      setCurrentStep(2);
+      console.log('2단계 데이터:', data, { profileImageUrl });
       
       // 다음 단계로 이동
       navigate('/signup/step3');
@@ -131,6 +201,7 @@ const SignupStep2: React.FC = () => {
                   <input
                     type="file"
                     accept="image/*"
+                    key={"profile-image-input"} // 키 추가로 컴포넌트 항상 새로 렌더링 (value 초기화)
                     onChange={(e) => {
                       const file = e.target.files?.[0] || undefined;
                       setValue("profileImage", file);
@@ -144,6 +215,10 @@ const SignupStep2: React.FC = () => {
                   {errors.profileImage?.message && (
                     <p className="text-sm text-red-500 mt-1">{errors.profileImage.message}</p>
                   )}
+                  {/* 업로드 오류 메시지 */}
+                  {uploadError && (
+                    <p className="text-sm text-red-500 mt-1">{uploadError}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -153,6 +228,16 @@ const SignupStep2: React.FC = () => {
               <Link
                 to="/signup/step1"
                 className="inline-flex items-center justify-center px-4 py-2 text-base font-medium rounded-lg transition-colors duration-200 bg-transparent hover:bg-gray-100 focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 text-gray-600 border-transparent"
+                onClick={() => {
+                  // 현재 입력된 데이터 저장
+                  const currentData = {
+                    birthDate: String(getValues('birthDate') || ''),
+                    gender: getValues('gender'),
+                    profileImage: getValues('profileImage'),
+                    profileImagePreview: imagePreview
+                  };
+                  setStep2Data(currentData);
+                }}
               >
                 이전 단계
               </Link>
@@ -161,10 +246,10 @@ const SignupStep2: React.FC = () => {
                 variant="primary"
                 size="md"
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isUploading}
                 className="sm:min-w-[120px]"
               >
-                {isSubmitting ? "처리 중..." : "다음 단계"}
+                {isSubmitting || isUploading ? "처리 중..." : "다음 단계"}
               </Button>
             </div>
           </form>
