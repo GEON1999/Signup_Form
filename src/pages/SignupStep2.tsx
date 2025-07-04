@@ -16,10 +16,28 @@ const SignupStep2: React.FC = () => {
   
   // Zustand 스토어에서 데이터 가져오기
   const { 
+    step1Data,
     step2Data, 
     setStep2Data, 
-    setCurrentStep 
+    setCurrentStep,
+    usernameChecked,
+    usernameValid,
+    emailChecked,
+    emailValid
   } = useSignupStore();
+
+  // step1 완료 상태 확인 및 접근 제어
+  useEffect(() => {
+    const isStep1Complete = step1Data && 
+      usernameChecked && usernameValid && 
+      emailChecked && emailValid;
+    
+    if (!isStep1Complete) {
+      console.log('Step1이 완료되지 않았습니다. Step1으로 리디렉션합니다.');
+      navigate('/signup/step1', { replace: true });
+      return;
+    }
+  }, [step1Data, usernameChecked, usernameValid, emailChecked, emailValid, navigate]);
   
   const {
     register,

@@ -6,15 +6,6 @@ import { useSignupStore } from '../stores/signupStore';
 import { signUp } from '../api/auth';
 import { supabase } from '../lib/supabase';
 import type { SignupData } from '../types/auth';
-import type { Provider } from '@supabase/supabase-js';
-
-interface SnsAccount {
-  provider: 'github';
-  connected: boolean;
-  email?: string;
-  name?: string;
-  provider_id?: string;
-}
 
 interface FormErrors {
   general?: string;
@@ -23,12 +14,21 @@ interface FormErrors {
 
 const SignupStep3: React.FC = () => {
   const navigate = useNavigate();
-  const [snsAccounts, setSnsAccounts] = useState<SnsAccount[]>([
-    { provider: 'github', connected: false },
-  ]);
+  const [hasGitHubConnection, setHasGitHubConnection] = useState(false);
   const [connectingGithub, setConnectingGithub] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
+
+  // Zustand 스토어에서 데이터 가져오기
+  const {
+    step1Data,
+    step2Data,
+    usernameChecked,
+    usernameValid,
+    emailChecked,
+    emailValid,
+    resetAllData
+  } = useSignupStore();
 
   const steps = [
     {
@@ -43,87 +43,76 @@ const SignupStep3: React.FC = () => {
     },
     {
       number: 3,
-      title: 'SNS 연동',
-      description: '소셜 계정 연결 (선택)',
+      title: 'GitHub 연동',
+      description: 'GitHub 계정 연결 (선택)',
     },
   ];
 
-  const snsProviderInfo: Record<
-    SnsAccount['provider'],
-    { name: string; buttonColor: string; icon: React.ReactNode; color: string }
-  > = {
-    github: {
-      name: 'GitHub',
-      buttonColor: 'bg-gray-800 hover:bg-gray-900',
-      icon: (
-        <img className="w-8 h-8" src="/github-mark.png" alt="GitHub 로고" />
-      ),
-      color: 'bg-gray-100 hover:bg-gray-200 border-gray-300',
-    },
-  };
-
-  const handleSnsConnect = async (provider: SnsAccount['provider']) => {
-    if (provider === 'github') {
-      setConnectingGithub(true);
-      setErrors({});
-
-      try {
-        // Supabase GitHub OAuth 로그인
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'github' as Provider,
-          options: {
-            redirectTo: `${window.location.origin}/signup/step3`,
-            scopes: 'user:email',
-          },
-        });
-
-        if (error) {
-          throw error;
-        }
-
-        // 로그인 성공 시 팝업이 열리므로 여기서는 상태를 변경하지 않음
-        // GitHub 인증은 리디렉션으로 처리되며, 복귀 시 useEffect에서 처리함
-      } catch (error: any) {
-        console.error('GitHub 연동 오류:', error);
-        setErrors({
-          github: `GitHub 연동 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`,
-        });
-      } finally {
-        setConnectingGithub(false);
-      }
+  // step1과 step2 완료 상태 확인 및 접근 제어
+  useEffect(() => {
+    const isStep1Complete = step1Data && 
+      usernameChecked && usernameValid && 
+      emailChecked && emailValid;
+    
+    const isStep2Complete = step2Data && 
+      step2Data.birthDate && 
+      step2Data.gender;
+    
+    if (!isStep1Complete) {
+      console.log('Step1이 완료되지 않았습니다. Step1으로 리디렉션합니다.');
+      navigate('/signup/step1', { replace: true });
+      return;
     }
-  };
+    
+    if (!isStep2Complete) {
+      console.log('Step2가 완료되지 않았습니다. Step2로 리디렉션합니다.');
+      navigate('/signup/step2', { replace: true });
+      return;
+    }
+  }, [step1Data, step2Data, usernameChecked, usernameValid, emailChecked, emailValid, navigate]);
 
-  const handleSnsDisconnect = async (provider: SnsAccount['provider']) => {
+  // GitHub 연동 관련 상수들은 UI에서 직접 사용
+
+  const handleGitHubConnect = async () => {
+    setConnectingGithub(true);
+    setErrors({});
+
     try {
-      // Supabase 세션 종료
-      await supabase.auth.signOut();
+      // GitHub OAuth 로그인으로 리다이렉트
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'github',
+        options: {
+          redirectTo: `${window.location.origin}/signup/step3?github=connected`,
+          scopes: 'user:email',
+        },
+      });
 
-      // 연동 상태 해제
-      setSnsAccounts((prev) =>
-        prev.map((account) =>
-          account.provider === provider
-            ? {
-                ...account,
-                connected: false,
-                email: undefined,
-                name: undefined,
-                provider_id: undefined,
-              }
-            : account
-        )
-      );
-    } catch (error) {
-      console.error('GitHub 연동 해제 오류:', error);
+      if (error) {
+        throw error;
+      }
+    } catch (error: any) {
+      console.error('GitHub 연동 오류:', error);
+      setErrors({
+        github: `GitHub 연동 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`,
+      });
+      setConnectingGithub(false);
     }
   };
 
-  // Zustand 스토어에서 데이터 가져오기 - 개별 선택자로 분리하여 무한 루프 방지
-  const step1Data = useSignupStore((state) => state.step1Data);
-  const step2Data = useSignupStore((state) => state.step2Data);
-  const resetAllData = useSignupStore((state) => state.resetAllData);
 
-  // GitHub OAuth 콜백 처리
+
+  // GitHub 연동 시 GitHub 이메일 추출 함수
+  const getCurrentGitHubEmail = (): string | undefined => {
+    // URL 파라미터에서 GitHub 연돐 상태 확인
+    if (window.location.search.includes('github=connected')) {
+      // 실제 구현에서는 Supabase session에서 GitHub 이메일을 추출
+      // 여기서는 임시로 step1의 이메일을 사용
+      return step1Data?.email;
+    }
+    return undefined;
+  };
+
+  // GitHub OAuth 상태 감지 (linkIdentity 방식)
   useEffect(() => {
     const checkAuthState = async () => {
       try {
@@ -131,27 +120,14 @@ const SignupStep3: React.FC = () => {
           data: { session },
         } = await supabase.auth.getSession();
 
-        // 세션이 있고 GitHub로 로그인한 경우
-        if (session?.user && session.user.app_metadata?.provider === 'github') {
-          console.log('GitHub 사용자 세션 감지:', session.user);
+        // GitHub identity가 있는지 확인
+        const hasGitHub = session?.user?.identities?.some(
+          (identity) => identity.provider === 'github'
+        );
+        setHasGitHubConnection(!!hasGitHub);
 
-          // 연동 상태 업데이트
-          setSnsAccounts((prev) =>
-            prev.map((account) =>
-              account.provider === 'github'
-                ? {
-                    ...account,
-                    connected: true,
-                    email: session.user.email || undefined,
-                    name:
-                      session.user.user_metadata?.name ||
-                      session.user.user_metadata?.user_name ||
-                      'GitHub 사용자',
-                    provider_id: session.user.id,
-                  }
-                : account
-            )
-          );
+        if (hasGitHub) {
+          console.log('GitHub 연동 감지:', session?.user?.email);
         }
       } catch (error) {
         console.error('GitHub 세션 확인 오류:', error);
@@ -160,44 +136,36 @@ const SignupStep3: React.FC = () => {
 
     checkAuthState();
 
-    // Auth 상태 변경 감지
+    // Auth 상태 변경 감지 (linkIdentity 방식)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (
-        event === 'SIGNED_IN' &&
-        session?.user?.app_metadata?.provider === 'github'
-      ) {
-        setSnsAccounts((prev) =>
-          prev.map((account) =>
-            account.provider === 'github'
-              ? {
-                  ...account,
-                  connected: true,
-                  email: session.user.email || undefined,
-                  name:
-                    session.user.user_metadata?.name ||
-                    session.user.user_metadata?.user_name ||
-                    'GitHub 사용자',
-                  provider_id: session.user.id,
-                }
-              : account
-          )
+      if (event === 'SIGNED_IN') {
+        const hasGitHub = session?.user?.identities?.some(
+          (identity) => identity.provider === 'github'
         );
+        setHasGitHubConnection(!!hasGitHub);
+
+        // URL에 link=success 파라미터가 있으면 linkIdentity 성공
+        if (hasGitHub && window.location.search.includes('link=success')) {
+          console.log(
+            'GitHub linkIdentity 성공! 동일 계정에 GitHub identity 연결됨'
+          );
+
+          // URL 파라미터 제거
+          window.history.replaceState({}, '', window.location.pathname);
+
+          // 연동 완료 후 홈으로 이동
+          setTimeout(() => {
+            resetAllData();
+            navigate('/', { replace: true });
+            alert(
+              '회원가입 및 GitHub 연동이 성공적으로 완료되었습니다!\n\n이제 동일한 계정으로 이메일/비밀번호 또는 GitHub 로그인 모두 가능합니다.'
+            );
+          }, 1500);
+        }
       } else if (event === 'SIGNED_OUT') {
-        setSnsAccounts((prev) =>
-          prev.map((account) =>
-            account.provider === 'github'
-              ? {
-                  ...account,
-                  connected: false,
-                  email: undefined,
-                  name: undefined,
-                  provider_id: undefined,
-                }
-              : account
-          )
-        );
+        setHasGitHubConnection(false);
       }
     });
 
@@ -217,63 +185,176 @@ const SignupStep3: React.FC = () => {
     }
 
     try {
-      // GitHub 연동 정보 확인
-      const connectedGithub = snsAccounts.find(
-        (account) => account.provider === 'github' && account.connected
+      // 현재 인증된 세션 확인 (linkIdentity 방식)
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const authUser = session?.user;
+
+      // GitHub OAuth로 인증된 사용자인지 확인
+      const hasGitHubIdentity = authUser?.identities?.some(
+        (identity) => identity.provider === 'github'
       );
 
-      // 디버깅용 GitHub 연동 정보 출력
-      if (connectedGithub) {
-        console.log('GitHub 연동 정보:', {
-          provider: connectedGithub.provider,
-          name: connectedGithub.name,
-          email: connectedGithub.email,
-          provider_id: connectedGithub.provider_id,
-        });
+      console.log('Auth 상태:', {
+        hasAuthUser: !!authUser,
+        hasGitHubIdentity,
+        userEmail: authUser?.email,
+      });
+
+      // GitHub OAuth로 인증된 사용자인 경우 linkIdentity 방식으로 처리
+      if (hasGitHubIdentity && authUser) {
+        console.log(
+          '이미 GitHub로 인증되어 있습니다. 사용자 정보를 업데이트합니다.'
+        );
+
+        // 먼저 동일 이메일을 가진 사용자가 있는지 확인
+        const email = authUser.email || step1Data.email;
+        const { data: existingUser, error: findError } = await supabase
+          .from('users')
+          .select('id')
+          .eq('email', email)
+          .maybeSingle();
+
+        if (findError) {
+          console.error('사용자 조회 오류:', findError);
+          throw findError;
+        }
+
+        let userId = authUser.id;
+
+        if (existingUser) {
+          console.log(
+            '기존 사용자 정보 발견. 해당 사용자를 업데이트합니다:',
+            existingUser.id
+          );
+          userId = existingUser.id;
+
+          // 기존 사용자 업데이트
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({
+              username: step1Data.username,
+              email_verified: true, // GitHub 연동은 이메일 인증 처리
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', userId);
+
+          if (updateError) {
+            console.error('사용자 업데이트 오류:', updateError);
+            throw updateError;
+          }
+        } else {
+          console.log('새 사용자를 생성합니다:', userId);
+          // 새 사용자 생성
+          const { error: insertError } = await supabase.from('users').insert({
+            id: userId,
+            username: step1Data.username,
+            email: email,
+            email_verified: true, // GitHub 연동은 이메일 인증 처리
+            phone: '',
+            phone_verified: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+
+          if (insertError) {
+            console.error('새 사용자 생성 오류:', insertError);
+            throw insertError;
+          }
+        }
+
+        // profiles 테이블에 step2에서 입력한 정보 저장
+        // 먼저 해당 user_id로 업데이트 대상 프로필이 있는지 확인
+        const { data: existingProfile, error: profileFindError } =
+          await supabase
+            .from('profiles')
+            .select('id')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        if (profileFindError) {
+          console.error('프로필 조회 오류:', profileFindError);
+          throw profileFindError;
+        }
+
+        if (existingProfile) {
+          // 프로필 업데이트
+          const { error: updateProfileError } = await supabase
+            .from('profiles')
+            .update({
+              birth_date: step2Data.birthDate,
+              gender: step2Data.gender,
+              profile_image_url: step2Data.profileImageUrl || '',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('user_id', userId);
+
+          if (updateProfileError) {
+            console.error('프로필 업데이트 오류:', updateProfileError);
+            throw updateProfileError;
+          }
+        } else {
+          // 새 프로필 생성
+          const { error: insertProfileError } = await supabase
+            .from('profiles')
+            .insert({
+              user_id: userId,
+              birth_date: step2Data.birthDate,
+              gender: step2Data.gender,
+              profile_image_url: step2Data.profileImageUrl || '',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+
+          if (insertProfileError) {
+            console.error('프로필 생성 오류:', insertProfileError);
+            throw insertProfileError;
+          }
+        }
+
+        // GitHub 연동 시 social_id 업데이트
+        const githubEmail = getCurrentGitHubEmail();
+        if (githubEmail) {
+          const { error: socialIdError } = await supabase
+            .from('users')
+            .update({ social_id: githubEmail })
+            .eq('id', userId);
+
+          if (socialIdError) {
+            console.error('social_id 업데이트 오류:', socialIdError);
+            throw socialIdError;
+          }
+          console.log('GitHub 연동 완료 - social_id 업데이트됨');
+        }
+
+        console.log('GitHub 연동 사용자 정보 업데이트 완료');
       }
 
-      // SignupData 인터페이스에 맞게 데이터 구성
+      // GitHub 연동 여부와 관계없이 항상 signUp 호출 (이메일/비밀번호 로컬 로그인 지원)
       const signupData: SignupData = {
         username: step1Data.username,
         email: step1Data.email,
         password: step1Data.password,
-        birth_date: step2Data.birthDate,
+        phone: step1Data.phone,
+        birthDate: step2Data.birthDate,
         gender: step2Data.gender,
-        profile_image_url: step2Data.profileImageUrl || '',
-        // GitHub 연동 정보가 있는 경우 추가
-        github_account: connectedGithub
-          ? {
-              provider_id: connectedGithub.provider_id || '',
-              provider_email: connectedGithub.email,
-              provider_name: connectedGithub.name,
-            }
-          : undefined,
+        profileImageUrl: step2Data.profileImageUrl || '',
+        // GitHub 연동 시 social_id 설정, 없으면 undefined
+        socialId: hasGitHubConnection ? getCurrentGitHubEmail() : undefined,
       };
 
-      console.log('회원가입 요청 데이터:', signupData);
-
-      // Supabase API를 통한 실제 회원가입 요청
       const result = await signUp(signupData);
-
-      console.log('회원가입 결과:', result);
-
-      // GitHub 연동 상태가 있었다면 로그아웃 처리
-      if (snsAccounts.some((acc) => acc.connected)) {
-        await supabase.auth.signOut();
-      }
-
-      // 회원가입 데이터 초기화
-      resetAllData();
+      console.log('회원가입 성공 (로컬 로그인 지원 + GitHub 연동):', result);
 
       // 회원가입 완료 후 홈으로 이동
+      resetAllData();
       navigate('/', { replace: true });
-
-      // 성공 메시지
-      alert('회원가입이 성공적으로 완료되었습니다! 환영합니다.');
+      alert('회원가입이 성공적으로 완료되었습니다!');
     } catch (error: any) {
       console.error('회원가입 오류:', error);
       setErrors({
-        general: `회원가입 완료 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`,
+        general: `회원가입 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`,
       });
     } finally {
       setIsLoading(false);
@@ -299,64 +380,49 @@ const SignupStep3: React.FC = () => {
               onDismiss={() => setErrors({ general: undefined })}
             />
           )}
-          {/* SNS 계정 연동 옵션 */}
+          {/* GitHub 계정 연동 옵션 */}
           <div className="space-y-4">
-            {snsAccounts.map((account) => {
-              const providerInfo = snsProviderInfo[account.provider];
-
-              return (
-                <div
-                  key={account.provider}
-                  className={`border rounded-lg p-4 transition-colors duration-200 ${
-                    account.connected
-                      ? 'border-green-200 bg-green-50'
-                      : `border-gray-200 ${providerInfo.color}`
-                  }`}
-                >
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-center space-x-3">
-                      <span className="text-2xl">{providerInfo.icon}</span>
-                      <div>
-                        <h4 className="font-medium text-gray-900">
-                          {providerInfo.name}
-                        </h4>
-                        {account.connected ? (
-                          <div className="text-sm text-gray-600">
-                            <p>{account.email}</p>
-                            <p className="text-green-600 font-medium">
-                              ✓ 연동됨
-                            </p>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-gray-500">
-                            {providerInfo.name} 계정으로 로그인 및 데이터 동기화
-                          </p>
-                        )}
+            <div
+              className={`border rounded-lg p-4 transition-colors duration-200 ${
+                hasGitHubConnection
+                  ? 'border-green-200 bg-green-50'
+                  : 'border-gray-200 bg-gray-100 hover:bg-gray-200'
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center space-x-3">
+                  <img
+                    src="/github-mark.png"
+                    alt="GitHub"
+                    className="w-8 h-8"
+                  />
+                  <div>
+                    <h4 className="font-medium text-gray-900">GitHub</h4>
+                    {hasGitHubConnection ? (
+                      <div className="text-sm text-gray-600">
+                        <p className="text-green-600 font-medium">
+                          ✓ GitHub 계정이 연동되었습니다
+                        </p>
                       </div>
-                    </div>
-
-                    <div className="w-full sm:w-auto">
-                      {account.connected ? (
-                        <button
-                          onClick={() => handleSnsDisconnect(account.provider)}
-                          className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-300 rounded-lg hover:bg-red-50 transition-colors duration-200"
-                        >
-                          연동 해제
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleSnsConnect(account.provider)}
-                          disabled={connectingGithub || isLoading}
-                          className={`w-full sm:w-auto px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${providerInfo.buttonColor}`}
-                        >
-                          {connectingGithub ? '연동 중...' : '연동'}
-                        </button>
-                      )}
-                    </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">
+                        GitHub 계정으로 로그인 및 데이터 동기화
+                      </p>
+                    )}
                   </div>
                 </div>
-              );
-            })}
+
+                <div className="w-full sm:w-auto">
+                  <button
+                    onClick={handleGitHubConnect}
+                    disabled={connectingGithub || isLoading}
+                    className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-white bg-gray-800 hover:bg-gray-900 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {connectingGithub ? '연동 중...' : '연동'}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* 안내 메시지 */}

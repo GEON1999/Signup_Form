@@ -7,6 +7,7 @@ export interface User {
   phone: string;
   email_verified: boolean;
   phone_verified: boolean;
+  social_id?: string; // GitHub 연동 시 GitHub 이메일 저장
   created_at: string;
   updated_at: string;
 }
@@ -41,19 +42,18 @@ export interface AuthState {
   clearError: () => void;
 }
 
-export interface GitHubAccount {
-  provider_id: string;
-  provider_email?: string;
-  provider_name?: string;
-  access_token?: string;
-}
-
 export interface SignupData {
+  // Step 1 - 기본 정보
   username: string;
   email: string;
   password: string;
-  birth_date?: string;
-  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
-  profile_image_url?: string;
-  github_account?: GitHubAccount;
+  phone: string;
+  
+  // Step 2 - 프로필 정보
+  birthDate: string;
+  gender: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+  profileImageUrl?: string;
+  
+  // Step 3 - 소셜 연동 정보
+  socialId?: string; // GitHub 연동 시 GitHub 이메일 저장
 }
