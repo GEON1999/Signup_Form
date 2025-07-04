@@ -18,18 +18,9 @@ const SignupStep3: React.FC = () => {
   const [connectingGithub, setConnectingGithub] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
-  const [isCompleting, setIsCompleting] = useState(false);
 
   // Zustand 스토어에서 데이터 가져오기
-  const {
-    step1Data,
-    step2Data,
-    usernameChecked,
-    usernameValid,
-    emailChecked,
-    emailValid,
-    resetAllData
-  } = useSignupStore();
+  const { step1Data, step2Data, resetAllData } = useSignupStore();
 
   const steps = [
     {
@@ -48,36 +39,6 @@ const SignupStep3: React.FC = () => {
       description: 'GitHub 계정 연결 (선택)',
     },
   ];
-
-  // step1과 step2 완료 상태 확인 및 접근 제어
-  useEffect(() => {
-    // 회원가입 완료 진행 중일 때는 검증을 건너뜀
-    if (isCompleting) {
-      return;
-    }
-
-    const isStep1Complete = step1Data && 
-      usernameChecked && usernameValid && 
-      emailChecked && emailValid;
-    
-    const isStep2Complete = step2Data && 
-      step2Data.birthDate && 
-      step2Data.gender;
-    
-    if (!isStep1Complete) {
-      console.log('Step1이 완료되지 않았습니다. Step1으로 리디렉션합니다.');
-      navigate('/signup/step1', { replace: true });
-      return;
-    }
-    
-    if (!isStep2Complete) {
-      console.log('Step2가 완료되지 않았습니다. Step2로 리디렉션합니다.');
-      navigate('/signup/step2', { replace: true });
-      return;
-    }
-  }, [step1Data, step2Data, usernameChecked, usernameValid, emailChecked, emailValid, navigate, isCompleting]);
-
-  // GitHub 연동 관련 상수들은 UI에서 직접 사용
 
   const handleGitHubConnect = async () => {
     setConnectingGithub(true);
@@ -105,17 +66,28 @@ const SignupStep3: React.FC = () => {
     }
   };
 
-
-
   // GitHub 연동 시 GitHub 이메일 추출 함수
-  const getCurrentGitHubEmail = (): string | undefined => {
-    // URL 파라미터에서 GitHub 연돐 상태 확인
-    if (window.location.search.includes('github=connected')) {
-      // 실제 구현에서는 Supabase session에서 GitHub 이메일을 추출
-      // 여기서는 임시로 step1의 이메일을 사용
-      return step1Data?.email;
+  const getCurrentGitHubEmail = async (): Promise<string | undefined> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // GitHub identity에서 실제 GitHub 이메일 추출
+      const githubIdentity = session?.user?.identities?.find(
+        (identity) => identity.provider === 'github'
+      );
+      
+      if (githubIdentity) {
+        // GitHub identity의 이메일 또는 세션 사용자의 이메일 반환
+        const githubEmail = githubIdentity.identity_data?.email || session?.user?.email;
+        console.log('GitHub 이메일 추출:', githubEmail);
+        return githubEmail;
+      }
+      
+      return undefined;
+    } catch (error) {
+      console.error('GitHub 이메일 추출 오류:', error);
+      return undefined;
     }
-    return undefined;
   };
 
   // GitHub OAuth 상태 감지 (linkIdentity 방식)
@@ -142,7 +114,7 @@ const SignupStep3: React.FC = () => {
 
     checkAuthState();
 
-    // Auth 상태 변경 감지 (linkIdentity 방식)
+    // Auth 상태 변경 감지 (단순화)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
@@ -152,26 +124,8 @@ const SignupStep3: React.FC = () => {
         );
         setHasGitHubConnection(!!hasGitHub);
 
-        // URL에 link=success 파라미터가 있으면 linkIdentity 성공
-        if (hasGitHub && window.location.search.includes('link=success')) {
-          console.log(
-            'GitHub linkIdentity 성공! 동일 계정에 GitHub identity 연결됨'
-          );
-
-          // URL 파라미터 제거
-          window.history.replaceState({}, '', window.location.pathname);
-
-          // 연동 완료 후 홈으로 이동
-          setTimeout(() => {
-            navigate('/', { replace: true });
-            // 네비게이션 완료 후 성공 메시지와 데이터 리셋
-            setTimeout(() => {
-              alert(
-                '회원가입 및 GitHub 연동이 성공적으로 완료되었습니다!\n\n이제 동일한 계정으로 이메일/비밀번호 또는 GitHub 로그인 모두 가능합니다.'
-              );
-              resetAllData();
-            }, 500);
-          }, 1500);
+        if (hasGitHub) {
+          console.log('GitHub 연동 감지:', session?.user?.email);
         }
       } else if (event === 'SIGNED_OUT') {
         setHasGitHubConnection(false);
@@ -183,7 +137,6 @@ const SignupStep3: React.FC = () => {
 
   const handleComplete = async () => {
     setIsLoading(true);
-    setIsCompleting(true);
     setErrors({});
 
     if (!step1Data || !step2Data) {
@@ -195,171 +148,35 @@ const SignupStep3: React.FC = () => {
     }
 
     try {
-      // 현재 인증된 세션 확인 (linkIdentity 방식)
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const authUser = session?.user;
+      // GitHub 연동 여부와 실제 GitHub 이메일 추출
+      const githubEmail = await getCurrentGitHubEmail();
+      const hasGitHubConnection = githubEmail !== undefined;
 
-      // GitHub OAuth로 인증된 사용자인지 확인
-      const hasGitHubIdentity = authUser?.identities?.some(
-        (identity) => identity.provider === 'github'
-      );
-
-      console.log('Auth 상태:', {
-        hasAuthUser: !!authUser,
-        hasGitHubIdentity,
-        userEmail: authUser?.email,
+      console.log('회원가입 처리 시작:', {
+        hasGitHubConnection,
+        githubEmail,
+        userEmail: step1Data.email,
       });
 
-      // GitHub OAuth로 인증된 사용자인 경우 linkIdentity 방식으로 처리
-      if (hasGitHubIdentity && authUser) {
-        console.log(
-          '이미 GitHub로 인증되어 있습니다. 사용자 정보를 업데이트합니다.'
-        );
-
-        // 먼저 동일 이메일을 가진 사용자가 있는지 확인
-        const email = authUser.email || step1Data.email;
-        const { data: existingUser, error: findError } = await supabase
-          .from('users')
-          .select('id')
-          .eq('email', email)
-          .maybeSingle();
-
-        if (findError) {
-          console.error('사용자 조회 오류:', findError);
-          throw findError;
-        }
-
-        let userId = authUser.id;
-
-        if (existingUser) {
-          console.log(
-            '기존 사용자 정보 발견. 해당 사용자를 업데이트합니다:',
-            existingUser.id
-          );
-          userId = existingUser.id;
-
-          // 기존 사용자 업데이트
-          const { error: updateError } = await supabase
-            .from('users')
-            .update({
-              username: step1Data.username,
-              email_verified: true, // GitHub 연동은 이메일 인증 처리
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', userId);
-
-          if (updateError) {
-            console.error('사용자 업데이트 오류:', updateError);
-            throw updateError;
-          }
-        } else {
-          console.log('새 사용자를 생성합니다:', userId);
-          // 새 사용자 생성
-          const { error: insertError } = await supabase.from('users').insert({
-            id: userId,
-            username: step1Data.username,
-            email: email,
-            email_verified: true, // GitHub 연동은 이메일 인증 처리
-            phone: '',
-            phone_verified: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-
-          if (insertError) {
-            console.error('새 사용자 생성 오류:', insertError);
-            throw insertError;
-          }
-        }
-
-        // profiles 테이블에 step2에서 입력한 정보 저장
-        // 먼저 해당 user_id로 업데이트 대상 프로필이 있는지 확인
-        const { data: existingProfile, error: profileFindError } =
-          await supabase
-            .from('profiles')
-            .select('id')
-            .eq('user_id', userId)
-            .maybeSingle();
-
-        if (profileFindError) {
-          console.error('프로필 조회 오류:', profileFindError);
-          throw profileFindError;
-        }
-
-        if (existingProfile) {
-          // 프로필 업데이트
-          const { error: updateProfileError } = await supabase
-            .from('profiles')
-            .update({
-              birth_date: step2Data.birthDate,
-              gender: step2Data.gender,
-              profile_image_url: step2Data.profileImageUrl || '',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('user_id', userId);
-
-          if (updateProfileError) {
-            console.error('프로필 업데이트 오류:', updateProfileError);
-            throw updateProfileError;
-          }
-        } else {
-          // 새 프로필 생성
-          const { error: insertProfileError } = await supabase
-            .from('profiles')
-            .insert({
-              user_id: userId,
-              birth_date: step2Data.birthDate,
-              gender: step2Data.gender,
-              profile_image_url: step2Data.profileImageUrl || '',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            });
-
-          if (insertProfileError) {
-            console.error('프로필 생성 오류:', insertProfileError);
-            throw insertProfileError;
-          }
-        }
-
-        // GitHub 연동 시 social_id 업데이트
-        const githubEmail = getCurrentGitHubEmail();
-        if (githubEmail) {
-          const { error: socialIdError } = await supabase
-            .from('users')
-            .update({ social_id: githubEmail })
-            .eq('id', userId);
-
-          if (socialIdError) {
-            console.error('social_id 업데이트 오류:', socialIdError);
-            throw socialIdError;
-          }
-          console.log('GitHub 연동 완료 - social_id 업데이트됨');
-        }
-
-        console.log('GitHub 연동 사용자 정보 업데이트 완료');
-      }
-
-      // GitHub 연동 여부와 관계없이 항상 signUp 호출 (이메일/비밀번호 로컬 로그인 지원)
+      // 항상 signUp을 호출하여 Supabase Auth에 이메일/비밀번호 계정 생성
       const signupData: SignupData = {
         username: step1Data.username,
         email: step1Data.email,
         password: step1Data.password,
-        phone: step1Data.phone,
+        phone: '',
         birthDate: step2Data.birthDate,
         gender: step2Data.gender,
         profileImageUrl: step2Data.profileImageUrl || '',
-        // GitHub 연동 시 social_id 설정, 없으면 undefined
-        socialId: hasGitHubConnection ? getCurrentGitHubEmail() : undefined,
+        // GitHub 연동 시 실제 GitHub 이메일을 social_id로 설정
+        socialId: githubEmail,
       };
 
       const result = await signUp(signupData);
-      console.log('회원가입 성공 (로컬 로그인 지원 + GitHub 연동):', result);
+      console.log('회원가입 성공 (이메일/비밀번호 + GitHub 연동):', result);
 
       // 회원가입 완료 후 홈으로 이동 (먼저 이동)
       navigate('/', { replace: true });
-      
+
       // 네비게이션 완료 후 성공 메시지와 데이터 리셋
       setTimeout(() => {
         alert('회원가입이 성공적으로 완료되었습니다!');
@@ -372,7 +189,6 @@ const SignupStep3: React.FC = () => {
       });
     } finally {
       setIsLoading(false);
-      setIsCompleting(false);
     }
   };
 
