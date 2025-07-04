@@ -280,3 +280,109 @@ export const getCurrentUser = async (): Promise<{
     throw error;
   }
 };
+
+/**
+ * 사용자명 중복 확인 API 함수
+ * @param username 확인할 사용자명
+ * @returns 중복 여부 (true: 중복됨, false: 사용 가능)
+ */
+export const checkUsernameAvailability = async (
+  username: string
+): Promise<{
+  isAvailable: boolean;
+  message: string;
+}> => {
+  try {
+    console.log('사용자명 중복 확인 시작:', username);
+
+    // 데이터베이스에서 중복 확인 - select 메소드 변경
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username);
+
+    console.log('Supabase 사용자명 응답:', { data, error });
+
+    if (error) {
+      console.error('사용자명 중복 확인 오류:', error);
+      return {
+        isAvailable: false,
+        message: '중복 확인 중 오류가 발생했습니다',
+      };
+    }
+
+    // 실제 데이터베이스에서 찾지 못한 경우 목업 데이터에서 확인
+    let isAvailable = data.length === 0;
+
+    console.log('사용자명 중복 확인 결과:', {
+      dataLength: data.length,
+      isAvailable,
+    });
+
+    return {
+      isAvailable,
+      message: isAvailable
+        ? '중복되지 않은 사용자명입니다'
+        : '이미 사용중인 사용자명입니다',
+    };
+  } catch (error: any) {
+    console.error('사용자명 중복 확인 API 오류:', error.message);
+    return {
+      isAvailable: false,
+      message: '중복 확인 중 오류가 발생했습니다',
+    };
+  }
+};
+
+/**
+ * 이메일 중복 확인 API 함수
+ * @param email 확인할 이메일
+ * @returns 중복 여부 (true: 중복됨, false: 사용 가능)
+ */
+export const checkEmailAvailability = async (
+  email: string
+): Promise<{
+  isAvailable: boolean;
+  message: string;
+}> => {
+  try {
+    console.log('이메일 중복 확인 시작:', email);
+
+    // 데이터베이스에서 중복 확인 - select 메소드 변경
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email);
+
+    console.log('Supabase 이메일 응답:', { data, error });
+
+    if (error) {
+      console.error('이메일 중복 확인 오류:', error);
+      return {
+        isAvailable: false,
+        message: '중복 확인 중 오류가 발생했습니다',
+      };
+    }
+
+    // 실제 데이터베이스에서 찾지 못한 경우 목업 데이터에서 확인
+    let isAvailable = data.length === 0;
+
+    console.log('이메일 중복 확인 결과:', {
+      dataLength: data.length,
+      isAvailable,
+    });
+
+    return {
+      isAvailable,
+      message: isAvailable
+        ? '중복되지 않은 이메일입니다'
+        : '이미 가입된 이메일입니다',
+    };
+  } catch (error: any) {
+    console.error('이메일 중복 확인 API 오류:', error.message);
+    return {
+      isAvailable: false,
+      message: '중복 확인 중 오류가 발생했습니다',
+    };
+  }
+};

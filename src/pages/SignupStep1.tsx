@@ -1,17 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Input, Button, FormContainer } from '../components/ui';
 import ProgressIndicator from '../components/ProgressIndicator';
 import { step1Schema, type Step1FormData } from '../schemas/signupSchemas';
+import { checkUsernameAvailability, checkEmailAvailability } from '../api/auth';
 
 const SignupStep1: React.FC = () => {
   const navigate = useNavigate();
-  
+
   const {
     register,
     handleSubmit,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<Step1FormData>({
     resolver: zodResolver(step1Schema),
@@ -24,6 +26,97 @@ const SignupStep1: React.FC = () => {
       phone: '',
     },
   });
+
+  // 중복 확인 상태
+  const [usernameCheck, setUsernameCheck] = useState<{
+    isChecking: boolean;
+    isChecked: boolean;
+    isValid: boolean;
+    message: string;
+  }>({ isChecking: false, isChecked: false, isValid: false, message: '' });
+
+  const [emailCheck, setEmailCheck] = useState<{
+    isChecking: boolean;
+    isChecked: boolean;
+    isValid: boolean;
+    message: string;
+  }>({ isChecking: false, isChecked: false, isValid: false, message: '' });
+
+  // 사용자명 중복 확인
+  const handleUsernameCheck = async () => {
+    const username = getValues('username');
+    if (!username || username.trim().length === 0) {
+      setUsernameCheck({
+        isChecking: false,
+        isChecked: true,
+        isValid: false,
+        message: '사용자명을 입력해주세요',
+      });
+      return;
+    }
+
+    setUsernameCheck({
+      isChecking: true,
+      isChecked: false,
+      isValid: false,
+      message: '',
+    });
+
+    try {
+      const result = await checkUsernameAvailability(username);
+      setUsernameCheck({
+        isChecking: false,
+        isChecked: true,
+        isValid: result.isAvailable,
+        message: result.message,
+      });
+    } catch (error) {
+      setUsernameCheck({
+        isChecking: false,
+        isChecked: true,
+        isValid: false,
+        message: '중복 확인 중 오류가 발생했습니다',
+      });
+    }
+  };
+
+  // 이메일 중복 확인
+  const handleEmailCheck = async () => {
+    const email = getValues('email');
+    if (!email || email.trim().length === 0) {
+      setEmailCheck({
+        isChecking: false,
+        isChecked: true,
+        isValid: false,
+        message: '이메일을 입력해주세요',
+      });
+      return;
+    }
+
+    setEmailCheck({
+      isChecking: true,
+      isChecked: false,
+      isValid: false,
+      message: '',
+    });
+
+    try {
+      const result = await checkEmailAvailability(email);
+      setEmailCheck({
+        isChecking: false,
+        isChecked: true,
+        isValid: result.isAvailable,
+        message: result.message,
+      });
+    } catch (error) {
+      setEmailCheck({
+        isChecking: false,
+        isChecked: true,
+        isValid: false,
+        message: '중복 확인 중 오류가 발생했습니다',
+      });
+    }
+  };
 
   const steps = [
     {
@@ -48,7 +141,7 @@ const SignupStep1: React.FC = () => {
       // TODO: 실시간 중복 확인 로직 추가 예정
       // TODO: 데이터 보존 로직 추가 예정
       console.log('1단계 데이터:', data);
-      
+
       // 다음 단계로 이동
       navigate('/signup/step2');
     } catch (error) {
@@ -68,29 +161,93 @@ const SignupStep1: React.FC = () => {
           maxWidth="lg"
         >
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-6">
               {/* 아이디 */}
               <div>
-                <Input
-                  label="아이디"
-                  {...register("username")}
-                  type="text"
-                  placeholder="아이디를 입력해주세요"
-                  autoComplete="username"
-                  error={errors.username?.message}
-                />
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+                  아이디
+                </label>
+                <div className="flex gap-2 items-start">
+                  <div className="flex-grow">
+                    <Input
+                      id="username"
+                      {...register('username')}
+                      type="text"
+                      placeholder="아이디를 입력해주세요"
+                      autoComplete="username"
+                      error={errors.username?.message}
+                      helperText={
+                        usernameCheck.isChecked 
+                          ? <span className={usernameCheck.isValid ? 'text-green-600' : 'text-red-500'}>
+                              {usernameCheck.message}
+                            </span>
+                          : undefined
+                      }
+                    />
+                  </div>
+                  <div className="pt-[6px] flex-shrink-0">
+                    <Button
+                      type="button"
+                      onClick={handleUsernameCheck}
+                      disabled={usernameCheck.isChecking}
+                      className="px-3 py-[9px] text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300 rounded whitespace-nowrap"
+                      size="sm"
+                    >
+                      {usernameCheck.isChecking ? (
+                        <div className="flex items-center">
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-500 mr-1"></div>
+                          확인중
+                        </div>
+                      ) : (
+                        '중복확인'
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </div>
 
               {/* 이메일 */}
               <div>
-                <Input
-                  label="이메일"
-                  {...register("email")}
-                  type="email"
-                  placeholder="example@email.com"
-                  autoComplete="email"
-                  error={errors.email?.message}
-                />
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                  이메일
+                </label>
+                <div className="flex gap-2 items-start">
+                  <div className="flex-grow">
+                    <Input
+                      id="email"
+                      {...register('email')}
+                      type="email"
+                      placeholder="example@email.com"
+                      autoComplete="email"
+                      error={errors.email?.message}
+                      helperText={
+                        emailCheck.isChecked 
+                          ? <span className={emailCheck.isValid ? 'text-green-600' : 'text-red-500'}>
+                              {emailCheck.message}
+                            </span>
+                          : undefined
+                      }
+                    />
+                  </div>
+                  <div className="pt-[6px] flex-shrink-0">
+                    <Button
+                      type="button"
+                      onClick={handleEmailCheck}
+                      disabled={emailCheck.isChecking}
+                      className="px-3 py-[9px] text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300 rounded whitespace-nowrap"
+                      size="sm"
+                    >
+                      {emailCheck.isChecking ? (
+                        <div className="flex items-center">
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-500 mr-1"></div>
+                          확인중
+                        </div>
+                      ) : (
+                        '중복확인'
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -99,7 +256,7 @@ const SignupStep1: React.FC = () => {
               <div>
                 <Input
                   label="비밀번호"
-                  {...register("password")}
+                  {...register('password')}
                   type="password"
                   placeholder="비밀번호를 입력해주세요"
                   autoComplete="new-password"
@@ -111,7 +268,7 @@ const SignupStep1: React.FC = () => {
               <div>
                 <Input
                   label="비밀번호 확인"
-                  {...register("confirmPassword")}
+                  {...register('confirmPassword')}
                   type="password"
                   placeholder="비밀번호를 확인해 주세요"
                   autoComplete="new-password"
@@ -124,7 +281,7 @@ const SignupStep1: React.FC = () => {
             <div>
               <Input
                 label="전화번호"
-                {...register("phone")}
+                {...register('phone')}
                 type="tel"
                 placeholder="01012345678"
                 autoComplete="tel"
@@ -148,7 +305,7 @@ const SignupStep1: React.FC = () => {
                 disabled={isSubmitting}
                 className="sm:min-w-[120px]"
               >
-                {isSubmitting ? "처리 중..." : "다음 단계"}
+                {isSubmitting ? '처리 중...' : '다음 단계'}
               </Button>
             </div>
           </form>
