@@ -4,7 +4,7 @@ interface InputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
   label?: string;
   error?: string;
-  helperText?: string;
+  helperText?: React.ReactNode;
   variant?: 'default' | 'filled' | 'outlined';
   size?: 'sm' | 'md' | 'lg';
   leftIcon?: React.ReactNode;
@@ -88,14 +88,16 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             </div>
           )}
         </div>
-        {error && (
-          <p className="mt-2 text-sm text-red-600" role="alert">
-            {error}
-          </p>
-        )}
-        {helperText && !error && (
-          <p className="mt-2 text-sm text-gray-500">{helperText}</p>
-        )}
+        <div className="min-h-[1.5rem]">
+          {error && (
+            <p className="mt-2 text-sm text-red-600" role="alert">
+              {error}
+            </p>
+          )}
+          {helperText && (
+            <p className="mt-2 text-sm text-gray-500">{helperText}</p>
+          )}
+        </div>
       </div>
     );
   }

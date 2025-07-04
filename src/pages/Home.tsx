@@ -1,31 +1,39 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Input, Button, FormContainer } from '../components/ui';
-
-interface LoginData {
-  email: string;
-  password: string;
-}
+import { loginSchema, type LoginFormData } from '../schemas/signupSchemas';
 
 const Home: React.FC = () => {
-  const [loginData, setLoginData] = useState<LoginData>({
-    email: '',
-    password: '',
-  });
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setLoginData((prev) => ({ ...prev, [name]: value }));
-  };
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+    mode: 'onChange',
+    defaultValues: {
+      email: '',
+      password: '',
+    },
+  });
 
-  const handleLogin = async () => {
+  const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
-    // 실제 로그인 API 호출 대신 시뮬레이션
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    console.log('로그인 데이터:', loginData);
-    alert('로그인 기능은 데모용입니다.');
-    setIsLoading(false);
+    try {
+      // 실제 로그인 API 호출 대신 시뮬레이션
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      console.log('로그인 데이터:', data);
+      alert('로그인 기능은 데모용입니다.');
+    } catch (error) {
+      console.error('로그인 오류:', error);
+      alert('로그인 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleKakaoLogin = () => {
@@ -48,59 +56,73 @@ const Home: React.FC = () => {
           subtitle="우리의 이야기 시작하기"
           maxWidth="sm"
         >
-          {/* 로그인 폼 */}
-          <div className="space-y-6">
-            {/* 이메일/아이디 */}
-            <Input
-              label="이메일"
-              name="email"
-              type="email"
-              placeholder="이메일을 입력해주세요"
-              value={loginData.email}
-              onChange={handleInputChange}
-              autoComplete="username"
-            />
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {/* 로그인 폼 */}
+            <div className="space-y-6">
+              {/* 이메일/아이디 */}
+              <div>
+                <Input
+                  label="이메일"
+                  {...register('email')}
+                  type="text"
+                  placeholder="이메일을 입력해주세요"
+                  autoComplete="username"
+                />
+                {errors.email?.message && (
+                  <p className="text-sm text-red-500 mt-1">
+                    {errors.email.message}
+                  </p>
+                )}
+              </div>
 
-            {/* 비밀번호 */}
-            <Input
-              label="비밀번호"
-              name="password"
-              type="password"
-              placeholder="비밀번호를 입력해주세요"
-              value={loginData.password}
-              onChange={handleInputChange}
-              autoComplete="current-password"
-            />
-          </div>
+              {/* 비밀번호 */}
+              <div>
+                <Input
+                  label="비밀번호"
+                  {...register('password')}
+                  type="password"
+                  placeholder="비밀번호를 입력해주세요"
+                  autoComplete="current-password"
+                />
+                {errors.password?.message && (
+                  <p className="text-sm text-red-500 mt-1">
+                    {errors.password.message}
+                  </p>
+                )}
+              </div>
+            </div>
 
-          {/* 계정 찾기 링크 */}
-          <div className="flex justify-center space-x-4 text-sm text-gray-600">
-            <button
-              onClick={() => handleFindAccount('id')}
-              className="hover:text-gray-900 transition-colors duration-200"
+            {/* 계정 찾기 링크 */}
+            <div className="flex justify-center space-x-4 text-sm text-gray-600">
+              <button
+                type="button"
+                onClick={() => handleFindAccount('id')}
+                className="hover:text-gray-900 transition-colors duration-200"
+              >
+                아이디 찾기
+              </button>
+              <span className="text-gray-400">|</span>
+              <button
+                type="button"
+                onClick={() => handleFindAccount('password')}
+                className="hover:text-gray-900 transition-colors duration-200"
+              >
+                비밀번호 찾기
+              </button>
+            </div>
+
+            {/* 로그인 버튼 */}
+            <Button
+              variant="primary"
+              size="md"
+              type="submit"
+              loading={isLoading}
+              loadingText="로그인 중..."
+              className="w-full"
             >
-              아이디 찾기
-            </button>
-            <span className="text-gray-400">|</span>
-            <button
-              onClick={() => handleFindAccount('password')}
-              className="hover:text-gray-900 transition-colors duration-200"
-            >
-              비밀번호 찾기
-            </button>
-          </div>
-
-          {/* 로그인 버튼 */}
-          <Button
-            variant="primary"
-            size="md"
-            onClick={handleLogin}
-            loading={isLoading}
-            loadingText="로그인 중..."
-            className="w-full"
-          >
-            로그인
-          </Button>
+              로그인
+            </Button>
+          </form>
 
           {/* 구분선 */}
           <div className="relative">

@@ -214,7 +214,7 @@ CREATE POLICY "Users can delete own sns accounts" ON sns_accounts
 
 ### Users 테이블
 
-- `username`: 3-50자, 영문자/숫자만 허용
+- `username`: 4-20자, 영문자/숫자만 허용
 - `email`: 유효한 이메일 형식
 - `phone`: 대한민국 전화번호 형식
 - `password`: 최소 8자, 대소문자/숫자/특수문자 포함
