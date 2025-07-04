@@ -127,13 +127,13 @@ export type SignupFormData = z.infer<typeof signupSchema>;
 export const loginSchema = z.object({
   email: z
     .string()
-    .min(1, '이메일 또는 아이디를 입력해주세요')
+    .min(1, '이메일을 입력해주세요')
     .refine((value) => {
       // 이메일 형식 또는 아이디 형식 둘 다 허용
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const usernameRegex = /^[a-zA-Z0-9_]+$/;
       return emailRegex.test(value) || usernameRegex.test(value);
-    }, '올바른 이메일 또는 아이디를 입력해주세요'),
+    }, '올바른 이메일을 입력해주세요'),
 
   password: z.string().min(1, '비밀번호를 입력해주세요'),
 });
