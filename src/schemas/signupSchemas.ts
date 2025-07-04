@@ -120,12 +120,12 @@ export const signupSchema = z.object({
 // TypeScript 타입 추출
 export type Step1FormData = z.infer<typeof step1Schema>;
 // 기본 스키마에서 추출한 타입
-type Step2FormDataBase = z.infer<typeof step2Schema>;
+// 확장된 Step2FormData 타입 (Zustand 스토어에서 사용하기 위해 프로필 이미지 미리보기와 URL 추가)
+export type Step2FormData = z.infer<typeof step2Schema> & {
+  profileImagePreview?: string | undefined;
+  profileImageUrl?: string | undefined;
+};
 
-// 확장된 Step2FormData 타입 (Zustand 스토어에서 사용하기 위해 프로필 이미지 미리보기 추가)
-export interface Step2FormData extends Step2FormDataBase {
-  profileImagePreview?: string | null;
-}
 export type Step3FormData = z.infer<typeof step3Schema>;
 export type SignupFormData = z.infer<typeof signupSchema>;
 
