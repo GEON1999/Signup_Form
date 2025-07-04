@@ -18,6 +18,7 @@ const SignupStep3: React.FC = () => {
   const [connectingGithub, setConnectingGithub] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
 
   // Zustand 스토어에서 데이터 가져오기
   const {
@@ -50,6 +51,11 @@ const SignupStep3: React.FC = () => {
 
   // step1과 step2 완료 상태 확인 및 접근 제어
   useEffect(() => {
+    // 회원가입 완료 진행 중일 때는 검증을 건너뜀
+    if (isCompleting) {
+      return;
+    }
+
     const isStep1Complete = step1Data && 
       usernameChecked && usernameValid && 
       emailChecked && emailValid;
@@ -69,7 +75,7 @@ const SignupStep3: React.FC = () => {
       navigate('/signup/step2', { replace: true });
       return;
     }
-  }, [step1Data, step2Data, usernameChecked, usernameValid, emailChecked, emailValid, navigate]);
+  }, [step1Data, step2Data, usernameChecked, usernameValid, emailChecked, emailValid, navigate, isCompleting]);
 
   // GitHub 연동 관련 상수들은 UI에서 직접 사용
 
@@ -157,11 +163,14 @@ const SignupStep3: React.FC = () => {
 
           // 연동 완료 후 홈으로 이동
           setTimeout(() => {
-            resetAllData();
             navigate('/', { replace: true });
-            alert(
-              '회원가입 및 GitHub 연동이 성공적으로 완료되었습니다!\n\n이제 동일한 계정으로 이메일/비밀번호 또는 GitHub 로그인 모두 가능합니다.'
-            );
+            // 네비게이션 완료 후 성공 메시지와 데이터 리셋
+            setTimeout(() => {
+              alert(
+                '회원가입 및 GitHub 연동이 성공적으로 완료되었습니다!\n\n이제 동일한 계정으로 이메일/비밀번호 또는 GitHub 로그인 모두 가능합니다.'
+              );
+              resetAllData();
+            }, 500);
           }, 1500);
         }
       } else if (event === 'SIGNED_OUT') {
@@ -174,6 +183,7 @@ const SignupStep3: React.FC = () => {
 
   const handleComplete = async () => {
     setIsLoading(true);
+    setIsCompleting(true);
     setErrors({});
 
     if (!step1Data || !step2Data) {
@@ -347,10 +357,14 @@ const SignupStep3: React.FC = () => {
       const result = await signUp(signupData);
       console.log('회원가입 성공 (로컬 로그인 지원 + GitHub 연동):', result);
 
-      // 회원가입 완료 후 홈으로 이동
-      resetAllData();
+      // 회원가입 완료 후 홈으로 이동 (먼저 이동)
       navigate('/', { replace: true });
-      alert('회원가입이 성공적으로 완료되었습니다!');
+      
+      // 네비게이션 완료 후 성공 메시지와 데이터 리셋
+      setTimeout(() => {
+        alert('회원가입이 성공적으로 완료되었습니다!');
+        resetAllData();
+      }, 500);
     } catch (error: any) {
       console.error('회원가입 오류:', error);
       setErrors({
@@ -358,6 +372,7 @@ const SignupStep3: React.FC = () => {
       });
     } finally {
       setIsLoading(false);
+      setIsCompleting(false);
     }
   };
 

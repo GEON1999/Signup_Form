@@ -4,8 +4,7 @@ import SignupStep1 from './pages/SignupStep1';
 import SignupStep2 from './pages/SignupStep2';
 import SignupStep3 from './pages/SignupStep3';
 import UserHome from './pages/UserHome';
-import GitHubCallback from './pages/GitHubCallback';
-import UIDemo from './components/UIDemo';
+import GitHubCallback from './pages/GitHubCallBack';
 
 function App() {
   return (
@@ -18,7 +17,6 @@ function App() {
           <Route path="/signup/step3" element={<SignupStep3 />} />
           <Route path="/home" element={<UserHome />} />
           <Route path="/auth/github-callback" element={<GitHubCallback />} />
-          <Route path="/ui-demo" element={<UIDemo />} />
         </Routes>
       </div>
     </Router>
