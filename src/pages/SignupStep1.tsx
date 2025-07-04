@@ -1,24 +1,28 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Input, Button, FormContainer } from '../components/ui';
 import ProgressIndicator from '../components/ProgressIndicator';
-
-interface FormData {
-  username: string;
-  email: string;
-  password: string;
-  confirmPassword: string;
-  phone: string;
-}
+import { step1Schema, type Step1FormData } from '../schemas/signupSchemas';
 
 const SignupStep1: React.FC = () => {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState<FormData>({
-    username: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    phone: '',
+  
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<Step1FormData>({
+    resolver: zodResolver(step1Schema),
+    mode: 'onChange',
+    defaultValues: {
+      username: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
+      phone: '',
+    },
   });
 
   const steps = [
@@ -39,16 +43,17 @@ const SignupStep1: React.FC = () => {
     },
   ];
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleNext = () => {
-    // 데이터 저장 (선택사항)
-    localStorage.setItem('signupStep1Data', JSON.stringify(formData));
-    // 다음 단계로 이동
-    navigate('/signup/step2');
+  const onSubmit = async (data: Step1FormData) => {
+    try {
+      // TODO: 실시간 중복 확인 로직 추가 예정
+      // TODO: 데이터 보존 로직 추가 예정
+      console.log('1단계 데이터:', data);
+      
+      // 다음 단계로 이동
+      navigate('/signup/step2');
+    } catch (error) {
+      console.error('1단계 폼 제출 오류:', error);
+    }
   };
 
   return (
@@ -62,83 +67,91 @@ const SignupStep1: React.FC = () => {
           subtitle="회원가입을 위한 기본 정보를 입력해주세요"
           maxWidth="lg"
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 아이디 */}
-            <Input
-              label="아이디"
-              name="username"
-              type="text"
-              placeholder="아이디를 입력해주세요"
-              value={formData.username}
-              onChange={handleInputChange}
-              autoComplete="username"
-            />
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* 아이디 */}
+              <div>
+                <Input
+                  label="아이디"
+                  {...register("username")}
+                  type="text"
+                  placeholder="아이디를 입력해주세요"
+                  autoComplete="username"
+                  error={errors.username?.message}
+                />
+              </div>
 
-            {/* 이메일 */}
-            <Input
-              label="이메일"
-              name="email"
-              type="email"
-              placeholder="example@email.com"
-              value={formData.email}
-              onChange={handleInputChange}
-              autoComplete="email"
-            />
-          </div>
+              {/* 이메일 */}
+              <div>
+                <Input
+                  label="이메일"
+                  {...register("email")}
+                  type="email"
+                  placeholder="example@email.com"
+                  autoComplete="email"
+                  error={errors.email?.message}
+                />
+              </div>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 비밀번호 */}
-            <Input
-              label="비밀번호"
-              name="password"
-              type="password"
-              placeholder="비밀번호를 입력해주세요"
-              value={formData.password}
-              onChange={handleInputChange}
-              autoComplete="new-password"
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* 비밀번호 */}
+              <div>
+                <Input
+                  label="비밀번호"
+                  {...register("password")}
+                  type="password"
+                  placeholder="비밀번호를 입력해주세요"
+                  autoComplete="new-password"
+                  error={errors.password?.message}
+                />
+              </div>
 
-            {/* 비밀번호 확인 */}
-            <Input
-              label="비밀번호 확인"
-              name="confirmPassword"
-              type="password"
-              placeholder="비밀번호를 확인해 주세요"
-              value={formData.confirmPassword}
-              onChange={handleInputChange}
-              autoComplete="new-password"
-            />
-          </div>
+              {/* 비밀번호 확인 */}
+              <div>
+                <Input
+                  label="비밀번호 확인"
+                  {...register("confirmPassword")}
+                  type="password"
+                  placeholder="비밀번호를 확인해 주세요"
+                  autoComplete="new-password"
+                  error={errors.confirmPassword?.message}
+                />
+              </div>
+            </div>
 
-          {/* 전화번호 */}
-          <Input
-            label="전화번호"
-            name="phone"
-            type="tel"
-            placeholder="01012345678"
-            value={formData.phone}
-            onChange={handleInputChange}
-            autoComplete="tel"
-          />
+            {/* 전화번호 */}
+            <div>
+              <Input
+                label="전화번호"
+                {...register("phone")}
+                type="tel"
+                placeholder="01012345678"
+                autoComplete="tel"
+                error={errors.phone?.message}
+              />
+            </div>
 
-          {/* 네비게이션 버튼 */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-between pt-6">
-            <Link
-              to="/"
-              className="inline-flex items-center justify-center px-4 py-2 text-base font-medium rounded-lg transition-colors duration-200 bg-transparent hover:bg-gray-100 focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 text-gray-600 border-transparent"
-            >
-              홈으로 돌아가기
-            </Link>
+            {/* 네비게이션 버튼 */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-between pt-6">
+              <Link
+                to="/"
+                className="inline-flex items-center justify-center px-4 py-2 text-base font-medium rounded-lg transition-colors duration-200 bg-transparent hover:bg-gray-100 focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 text-gray-600 border-transparent"
+              >
+                홈으로 돌아가기
+              </Link>
 
-            <Button
-              variant="primary"
-              size="md"
-              onClick={handleNext}
-              className="sm:min-w-[120px]"
-            >
-              다음 단계
-            </Button>
-          </div>
+              <Button
+                variant="primary"
+                size="md"
+                type="submit"
+                disabled={isSubmitting}
+                className="sm:min-w-[120px]"
+              >
+                {isSubmitting ? "처리 중..." : "다음 단계"}
+              </Button>
+            </div>
+          </form>
         </FormContainer>
       </div>
     </div>
