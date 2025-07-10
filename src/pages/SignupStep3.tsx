@@ -69,20 +69,23 @@ const SignupStep3: React.FC = () => {
   // GitHub 연동 시 GitHub 이메일 추출 함수
   const getCurrentGitHubEmail = async (): Promise<string | undefined> => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       // GitHub identity에서 실제 GitHub 이메일 추출
       const githubIdentity = session?.user?.identities?.find(
         (identity) => identity.provider === 'github'
       );
-      
+
       if (githubIdentity) {
         // GitHub identity의 이메일 또는 세션 사용자의 이메일 반환
-        const githubEmail = githubIdentity.identity_data?.email || session?.user?.email;
+        const githubEmail =
+          githubIdentity.identity_data?.email || session?.user?.email;
         console.log('GitHub 이메일 추출:', githubEmail);
         return githubEmail;
       }
-      
+
       return undefined;
     } catch (error) {
       console.error('GitHub 이메일 추출 오류:', error);
@@ -90,43 +93,32 @@ const SignupStep3: React.FC = () => {
     }
   };
 
-  // GitHub OAuth 상태 감지 (linkIdentity 방식)
   useEffect(() => {
-    const checkAuthState = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        // GitHub identity가 있는지 확인
-        const hasGitHub = session?.user?.identities?.some(
-          (identity) => identity.provider === 'github'
-        );
-        setHasGitHubConnection(!!hasGitHub);
-
-        if (hasGitHub) {
-          console.log('GitHub 연동 감지:', session?.user?.email);
-        }
-      } catch (error) {
-        console.error('GitHub 세션 확인 오류:', error);
+    // GitHub 연동 상태 확인 함수
+    const checkGitHubConnection = (session: any) => {
+      const hasGitHub = session?.user?.identities?.some(
+        (identity: any) => identity.provider === 'github'
+      );
+      setHasGitHubConnection(!!hasGitHub);
+      if (hasGitHub) {
+        console.log('GitHub 연동 감지:', session.user.email);
       }
     };
 
-    checkAuthState();
+    // 초기 상태 확인
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        checkGitHubConnection(session);
+      })
+      .catch(console.error);
 
-    // Auth 상태 변경 감지 (단순화)
+    // 상태 변경 감지
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN') {
-        const hasGitHub = session?.user?.identities?.some(
-          (identity) => identity.provider === 'github'
-        );
-        setHasGitHubConnection(!!hasGitHub);
-
-        if (hasGitHub) {
-          console.log('GitHub 연동 감지:', session?.user?.email);
-        }
+        checkGitHubConnection(session);
       } else if (event === 'SIGNED_OUT') {
         setHasGitHubConnection(false);
       }
